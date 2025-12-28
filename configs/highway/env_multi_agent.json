@@ -1,0 +1,24 @@
+{
+    "screen_width": 2000,
+    "screen_height": 480,
+
+    "controlled_vehicles": 3,
+    "lanes_count": 4,
+    "vehicles_count": 1,
+    "observation": {
+        "type": "MultiAgentObservation",
+        "observation_config": {
+            "type": "Kinematics"
+        }
+    },
+    "action": {
+        "type": "MultiAgentAction",
+        "action_config": {
+        "type": "DiscreteMetaAction"
+        }
+    },
+    "duration": 400,
+    "simulation_frequency": 60,
+    "ego_spacing": 1
+
+}
