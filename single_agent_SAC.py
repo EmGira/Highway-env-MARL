@@ -10,11 +10,17 @@ if not sys.warnoptions:
 
 import ray
 from ray import tune
-from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.sac import SACConfig
 from ray.rllib.connectors.env_to_module import FlattenObservations
 from ray.train import RunConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 
+class MyCallbacks(DefaultCallbacks):
+    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs):
+        # Questo viene eseguito ogni volta che una macchina finisce il percorso
+        reward = episode.get_return()
+        length = episode.length
+        print(f" -> Episodio finito: Reward={reward:.2f}, Lunghezza={length}")
 
 import gymnasium as gym
 import highway_env
@@ -37,7 +43,6 @@ nr_of_subdirectories = len([f for f in checkpoints_dir.iterdir() if f.is_dir()])
 ENV_ID = 'highway-v0'
 
 ENV_CONFIG = {
-    
 
     "observation": {
         "type": "Kinematics"
@@ -83,35 +88,27 @@ tune.register_env(ENV_ID, env_creator)
 
 # Algorithm config
 config = (
-    PPOConfig()
-    .environment(env = ENV_ID,
-                 env_config= ENV_CONFIG
+    SACConfig()
+    .environment(
+        env=ENV_ID,
+        env_config=ENV_CONFIG
     )
     .framework("torch")
 
     .env_runners(
-        num_env_runners=8,  #engaging 4 gpu cores
-        num_envs_per_env_runner=2, #each core simulating 2 envs
-
-        # Observations are discrete (ints) -> We need to flatten (one-hot) them.
+        num_env_runners=1,
         env_to_module_connector=lambda env, spaces, device: FlattenObservations(),
-        
-        sample_timeout_s=300.0,       # Increase timeout further
-        rollout_fragment_length="auto" # Let RLlib decide based on batch size
     )
-    .evaluation(
-        evaluation_num_env_runners=1,
-        evaluation_interval=0
-        )
     .training(
-        train_batch_size = 3200,
-        lr=5e-5 
+        gamma=0.9,
+        actor_lr=0.001,
+        critic_lr=0.002,
+        train_batch_size_per_learner=32,
     )
     .learners(
         num_learners=1,
         num_gpus_per_learner=1
     )
-
 
 )
 
@@ -123,10 +120,8 @@ log_dir = algo.logdir
 for i in range(10):
     result = algo.train()
     
-    stats = result.get('env_runners', result.get('sampler_results', {}))
-    reward = stats.get('episode_return_mean', float('nan'))
-    print(f"Iterazione {i + 1}: Ricompensa Media: {reward:.2f}")
-
+    reward = result['env_runners']['episode_return_mean'] #TRY REMOVING
+    print("reward:", reward)
 algo.evaluate()
 
 

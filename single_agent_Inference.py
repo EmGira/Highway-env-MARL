@@ -9,7 +9,7 @@ import numpy as np
 import ray
 from pathlib import Path
 
-CHECKPOINT_PATH = os.path.abspath("./checkpoints/2025-12-23/ID_0")  
+CHECKPOINT_PATH = os.path.abspath("./checkpoints/2025-12-28/ID_0_saPPO")  
 
 
 AGENTS_NR = 2
@@ -17,35 +17,32 @@ AGENTS_NR = 2
 # Env config
 ENV_ID = 'highway-v0'
 ENV_CONFIG = {
-    "screen_width": 640,
-    "screen_height": 480,
-
-
-    "controlled_vehicles": AGENTS_NR,
-    "lanes_count": 4,
-    "vehicles_count": 20,
-    "reward_speed_range": [40, 50], #increased reward speed
-    "collision_reward": -0.5, #incentivise overtakes by reducing punishment on collision
-
 
     "observation": {
-        "type": "MultiAgentObservation",
-        "observation_config": {
-            "type": "Kinematics",
-        }
-    },
-
+        "type": "Kinematics"
+        },
     "action": {
-        "type": "MultiAgentAction",
-        "action_config": {
-        "type": "DiscreteMetaAction",
-        }
-    },
+        "type": "DiscreteMetaAction"
+        },
 
-    "duration": 400,
-    "simulation_frequency": 15,
-    "ego_spacing": 1,
-  
+    "lanes_count": 4,
+    "vehicles_count": 50,
+    "controlled_vehicles": 1,
+    "initial_lane_id": None,
+    "duration": 40, 
+    "ego_spacing": 2,
+    "vehicles_density": 1,
+
+
+    "collision_reward": -1, 
+    "right_lane_reward": 0.1,  
+    "high_speed_reward": 0.4,
+    "lane_change_reward": 0,
+
+    "reward_speed_range": [20, 30],
+
+    "normalize_reward": True,
+    "offroad_terminal": False
 }
 
 #    "observation": {
@@ -92,25 +89,27 @@ while not (terminated or truncated):
 
 
     # Compute the next action from a batch (B=1) of observations.
-
-    flat_obs_list = [o.flatten() for o in obs]
-    flat_obs = np.array(flat_obs_list)
+    if isinstance(obs, (tuple, list)):
+        flat_obs = np.stack([o.flatten() for o in obs])
+        is_multi_agent = True
+    else:
+        flat_obs = obs.flatten()[np.newaxis, :]
+        is_multi_agent = False
 
     obs_batch = torch.from_numpy(flat_obs).unsqueeze(0) 
-#in un ambiente mulit agente posso creare un batch di piu osservazione
- # qui obs_batch ha shape 1,25   [[obs1]] dove obs_1 e un array di 25 valori
- # potrei creare una batch con tutte le osservazioni degli agenti
- # es: 3 agenti, batch 3, 25 [[obs1], [obs2], [obs3]]
- # in teoria dovrebbe essere comunque compatibile con il modello 
+
 
     model_outputs = rl_module.forward_inference({"obs": obs_batch})
     action_dist_params = model_outputs["action_dist_inputs"][0].numpy()
 
     #since our actions are discreete, we simply take the argmax and turn into a tuple 
     best_actions = np.argmax(action_dist_params, axis=1)
-    actions_tuple = tuple(a for a in best_actions)
+    if(is_multi_agent):
+        action_set = tuple(a for a in best_actions)
+    else:
+        actions_set = best_actions
     
-    obs, reward, terminated, truncated, info = test_env.step(actions_tuple)
+    obs, reward, terminated, truncated, info = test_env.step(action_set)
     test_env.render()
 
     episode_return += reward
