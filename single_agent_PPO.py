@@ -97,7 +97,7 @@ config = (
         env_to_module_connector=lambda env, spaces, device: FlattenObservations(),
         
         sample_timeout_s=300.0,       # Increase timeout further
-        rollout_fragment_length="auto" # Let RLlib decide based on batch size
+        rollout_fragment_length="auto" # RLlib decides based on batch size
     )
     .evaluation(
         evaluation_num_env_runners=1,

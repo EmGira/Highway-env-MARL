@@ -9,7 +9,7 @@ import numpy as np
 import ray
 from pathlib import Path
 
-CHECKPOINT_PATH = os.path.abspath("./checkpoints/2025-12-28/ID_0_saPPO")  
+CHECKPOINT_PATH = os.path.abspath("./checkpoints/2025-12-30/ID_7")  
 
 
 AGENTS_NR = 2
@@ -31,7 +31,7 @@ ENV_CONFIG = {
     "initial_lane_id": None,
     "duration": 40, 
     "ego_spacing": 2,
-    "vehicles_density": 1,
+    "vehicles_density": 1, 
 
 
     "collision_reward": -1, 
@@ -100,14 +100,14 @@ while not (terminated or truncated):
 
 
     model_outputs = rl_module.forward_inference({"obs": obs_batch})
-    action_dist_params = model_outputs["action_dist_inputs"][0].numpy()
+    action_dist_params = model_outputs["action_dist_inputs"][0].detach().numpy() #add .detach() if the algo requires grad. (ex: SAC)
 
     #since our actions are discreete, we simply take the argmax and turn into a tuple 
     best_actions = np.argmax(action_dist_params, axis=1)
     if(is_multi_agent):
         action_set = tuple(a for a in best_actions)
     else:
-        actions_set = best_actions
+        action_set = best_actions
     
     obs, reward, terminated, truncated, info = test_env.step(action_set)
     test_env.render()

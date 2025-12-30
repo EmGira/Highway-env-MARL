@@ -1,26 +1,10 @@
-import sys
 import os
-from tqdm import tqdm
-
-if not sys.warnoptions:
-    import warnings
-    warnings.simplefilter("ignore")
-
-
+from tqdm import trange
 
 import ray
 from ray import tune
 from ray.rllib.algorithms.sac import SACConfig
 from ray.rllib.connectors.env_to_module import FlattenObservations
-from ray.train import RunConfig
-from ray.rllib.algorithms.callbacks import DefaultCallbacks
-
-class MyCallbacks(DefaultCallbacks):
-    def on_episode_end(self, *, worker, base_env, policies, episode, env_index, **kwargs):
-        # Questo viene eseguito ogni volta che una macchina finisce il percorso
-        reward = episode.get_return()
-        length = episode.length
-        print(f" -> Episodio finito: Reward={reward:.2f}, Lunghezza={length}")
 
 import gymnasium as gym
 import highway_env
@@ -29,7 +13,6 @@ import glob
 from pathlib import Path
 import datetime
 
-pbar = tqdm(range(10), desc="Training RLlib")
 
 today = datetime.date.today()
 
@@ -55,17 +38,15 @@ ENV_CONFIG = {
     "vehicles_count": 50,
     "controlled_vehicles": 1,
     "initial_lane_id": None,
-    "duration": 40,  # [s]
-    "ego_spacing": 2,
-    "vehicles_density": 1,
+    "duration": 40, 
+    "ego_spacing": 2, 
+    "vehicles_density": 1, #try 2
 
 
-    "collision_reward": -1,  # The reward received when colliding with a vehicle.
-    "right_lane_reward": 0.1,  # The reward received when driving on the right-most lanes, linearly mapped to
-    # zero for other lanes.
-    "high_speed_reward": 0.4,  # The reward received when driving at full speed, linearly mapped to zero for
-    # lower speeds according to config["reward_speed_range"].
-    "lane_change_reward": 0,  # The reward received at each lane change action.
+    "collision_reward": -5,  
+    "right_lane_reward": 0.1,  #try increasing
+    "high_speed_reward": 0.4,  
+    "lane_change_reward": 0,  
 
     "reward_speed_range": [20, 30],
 
@@ -96,33 +77,64 @@ config = (
     .framework("torch")
 
     .env_runners(
-        num_env_runners=1,
+        num_env_runners=8,
         env_to_module_connector=lambda env, spaces, device: FlattenObservations(),
+        num_envs_per_env_runner=2,
+        rollout_fragment_length="auto"
     )
+    .evaluation(
+        evaluation_num_env_runners=1,
+        evaluation_interval=5,
+        evaluation_config=SACConfig.overrides(
+            explore=False, 
+            env_config=ENV_CONFIG
+        ) #config usato per l'env in fase di valutazione
+    )
+
     .training(
-        gamma=0.9,
-        actor_lr=0.001,
-        critic_lr=0.002,
-        train_batch_size_per_learner=32,
+        gamma=0.99,
+        actor_lr=3e-4,
+        critic_lr=3e-4,
+
+        # evita picchi ne gradiente quando lagente viene punto severamente (es: schianto)
+        grad_clip=1.0,
+        grad_clip_by="global_norm",
+
+        train_batch_size_per_learner=1024, 
+        
+        replay_buffer_config={
+            "type": "PrioritizedEpisodeReplayBuffer",
+            "capacity": 50000,  # Conserva 50000 esperienze diverse
+            "alpha": 0.6, #peso sulla priorità
+        },
+
     )
     .learners(
         num_learners=1,
         num_gpus_per_learner=1
     )
 
-)
+)   
 
 
 algo = config.build_algo()
 log_dir = algo.logdir
 
 # Training
-for i in range(10):
+for i in range(100):
     result = algo.train()
+       
+    training_stats = result.get('env_runners', result.get('sampler_results', {}))
+    training_reward = training_stats.get('episode_return_mean', float('nan'))
     
-    reward = result['env_runners']['episode_return_mean'] #TRY REMOVING
-    print("reward:", reward)
+
+    evaluation_stats = result.get('evaluation', {})
+    evaluation_reward = evaluation_stats.get('env_runners', {}).get('episode_return_mean', 0)
+    
+    print(f"Iter {i+1} | Train Reward: {training_reward:.2f} | Eval Reward: {evaluation_reward:.2f}")
+
 algo.evaluate()
+
 
 
 path = f"./checkpoints/{today.strftime('%Y-%m-%d')}/ID_{nr_of_subdirectories}"
@@ -141,7 +153,7 @@ algo.stop()
 train_files = glob.glob(os.path.join(log_dir, "result.json"))
 
 if train_files:
-    print(f"\n@@@ I risultati di addestramento sono salvati in: {train_files[0]} \n")
+    print(f"@@@ I risultati di addestramento sono salvati in: {train_files[0]} \n")
     print(f"execute: tensorboard --logdir={train_files[0]} to see results") 
 else:
     print("\n$$$ Attenzione: il file result.json non è stato trovato.")
