@@ -21,6 +21,8 @@ import glob
 from pathlib import Path
 import datetime
 
+from MA_wrapper import RLlibHighwayWrapper
+
 
 today = datetime.date.today()
 
@@ -75,15 +77,18 @@ def env_creator(env_config):
 
 tune.register_env(ENV_ID, env_creator)
 
+
+
 # Algorithm config
 config = (
     PPOConfig()
-    .environment(env = ENV_ID,
-                 env_config= ENV_CONFIG
+    .environment(
+        env = ENV_ID,
+        env_config= ENV_CONFIG
     )
     .framework("torch")
     .env_runners(
-        num_env_runners=4,  #engaging 4 gpu cores
+        num_env_runners=8,  #engaging 8 gpu cores
         num_envs_per_env_runner=2, #each core simulating 2 envs
 
         # Observations are discrete (ints) -> We need to flatten (one-hot) them.
@@ -103,7 +108,6 @@ config = (
         num_learners=1,
         num_gpus_per_learner=1
     )
-
 )
 
 

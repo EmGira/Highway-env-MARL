@@ -89,7 +89,7 @@ while not (done or truncated):
     logits_agent_1 = all_logits[:5]
     logits_agent_2 = all_logits[5:]
 
-    # 3. Trova l'indice del valore massimo (l'azione) per ogni agente
+
     action_1 = torch.argmax(logits_agent_1).item()
     action_2 = torch.argmax(logits_agent_2).item()
     
@@ -110,7 +110,6 @@ print("Episode return:", episode_return)
 test_env.close()
 
 
-#close open ray processes
 trained_algo.stop()
 ray.shutdown()
 
