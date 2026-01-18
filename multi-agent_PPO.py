@@ -1,28 +1,14 @@
-import sys
-import os
-
-
-if not sys.warnoptions:
-    import warnings
-    warnings.simplefilter("ignore")
-
-
-
-import ray
-from ray import tune
-from ray.rllib.algorithms.ppo import PPOConfig
-from ray.rllib.connectors.env_to_module import FlattenObservations
-from ray.train import RunConfig
-
-import gymnasium as gym
+from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
+from utils.callbacks.Callbacks import CrashLoggerCallback
 import highway_env
 
+from ray import tune
+from ray.rllib.algorithms.ppo import PPOConfig
+
+import os
 import glob
 from pathlib import Path
 import datetime
-
-from MA_wrapper import RLlibHighwayWrapper
-
 
 today = datetime.date.today()
 
@@ -32,96 +18,96 @@ if not os.path.isdir(f"./checkpoints/{today.strftime('%Y-%m-%d')}"):
 checkpoints_dir = Path(f"./checkpoints/{today.strftime('%Y-%m-%d')}")
 nr_of_subdirectories = len([f for f in checkpoints_dir.iterdir() if f.is_dir()])
 
-ray.init(
-        log_to_driver=False, configure_logging=True,
-        logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO")
-        )
 
-
-# Env config
 ENV_ID = 'highway-v0'
-
 ENV_CONFIG = {
-    "screen_width": 640,
-    "screen_height": 480,
 
-    "controlled_vehicles": 2,
-    "lanes_count": 4,
-    "vehicles_count": 20,
-    "reward_speed_range": [40, 50], #increased reward speed
-    "collision_reward": -0.5, #incentivise overtakes by reducing punishment on collision
-
-    "observation": {
+    "observation": { 
         "type": "MultiAgentObservation",
-        "observation_config": {
-            "type": "Kinematics",
-        }
+        "observation_config": { "type": "Kinematics" }
     },
-
-    "action": {
+    "action": { 
         "type": "MultiAgentAction",
-        "action_config": {
-        "type": "DiscreteMetaAction",
-        }
+        "action_config": { "type": "DiscreteMetaAction" }
     },
 
-    "duration": 400,
-    "simulation_frequency": 15,
-    "ego_spacing": 1,
-  
+ 
+    "controlled_vehicles": 2,
+    "vehicles_count": 10, 
+
+    # Intersections need to reward slower speeds compared to highway.
+    "reward_speed_range": [10, 30], 
+    
+    # heavy collision punishment so agents quickly learn NOT to crash
+    "collision_reward": -5.0, 
+    
+    #reward for staying alive and exiting the intersection
+    "high_speed_reward": 1, 
+    "arrived_reward": 5.0, 
+
+    "on_road_reward": 0.1,
+    "offroad_terminal": True,
+    "reward_config": {
+         "collision_reward": -5.0, # Assicuriamoci che sia passato qui
+    },
+    
+    
+    "normalize_reward": False, 
+    
+    "duration": 200, 
 }
 
-def env_creator(env_config):
-    import highway_env
-    return gym.make(ENV_ID, render_mode=None, config=env_config)
+tune.register_env("highway_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG))
 
-tune.register_env(ENV_ID, env_creator)
-
-
-
-# Algorithm config
 config = (
     PPOConfig()
     .environment(
-        env = ENV_ID,
-        env_config= ENV_CONFIG
+        env = "highway_multiagent"
     )
     .framework("torch")
     .env_runners(
-        num_env_runners=8,  #engaging 8 gpu cores
-        num_envs_per_env_runner=2, #each core simulating 2 envs
+        num_env_runners=4,  #engaging 4 gpu cores
+        num_envs_per_env_runner=1, #each core simulating 2 envs
 
-        # Observations are discrete (ints) -> We need to flatten (one-hot) them.
-        env_to_module_connector=lambda env, spaces, device: FlattenObservations(),
-        sample_timeout_s=180.0,
-        rollout_fragment_length=400 
+        #env_to_module_connector=lambda env, spaces, device: FlattenObservations(), this caused issues, flattening happens in the MA_wrapper now
+        sample_timeout_s=200.0,
+        rollout_fragment_length="auto" 
     )
     .evaluation(
         evaluation_num_env_runners=1,
         evaluation_interval=0
         )
     .training(
-        train_batch_size = 6400,
+        train_batch_size = 4000,
         lr=5e-5 
     )
     .learners(
         num_learners=1,
         num_gpus_per_learner=1
     )
+    .multi_agent(
+        policies={"agent_0", "agent_1"}, 
+        policy_mapping_fn=lambda agent_id, episode, **kwargs: agent_id, 
+    )
+    .callbacks(CrashLoggerCallback)
 )
 
 
 algo = config.build_algo()
 log_dir = algo.logdir
-# Training
-for i in range(5):
+print("@@@ Logging directory: ", log_dir)
+
+for i in range(1):
     result = algo.train()
-    print(f"Iterazione {i + 1}: Ricompensa Media (Train): {result['env_runners']['episode_return_mean']:.2f}")
+
+    print(f"Iterazione {i + 1}:")
+    print(f"\tRicompensa Media (Train): {result['env_runners']['episode_return_mean']:.2f}")        #average total reward (sum of all agents rewards) 
+    print(f"\tLunghezza Media (Train): {result['env_runners']['episode_len_mean']:.2f}")            #average total nr of steps per episode (until all agents terminated)
+    print(f"\tRicompensa Media per agente (Train): {result['env_runners']['agent_episode_returns_mean']}")
+    print(f"\tNr Passi per agente (Train): {result['env_runners']['agent_steps']}")
 
 
 algo.evaluate()
-
-
 
 path = f"./checkpoints/{today.strftime('%Y-%m-%d')}/ID_{nr_of_subdirectories}"
 saved_results = algo.save(checkpoint_dir = os.path.abspath(path))
@@ -129,8 +115,7 @@ checkpoint_dir = saved_results.checkpoint.path
 
 if checkpoint_dir:
     print(f"\n@@@ Checkpoint salvato correttamente!")
-    print(f"@@@ Percorso: {checkpoint_dir}\n")
-
+    print(f"\t Percorso: {checkpoint_dir}\n")
 
 algo.stop()
 
@@ -139,7 +124,7 @@ algo.stop()
 train_files = glob.glob(os.path.join(log_dir, "result.json"))
 
 if train_files:
-    print(f"\n@@@ I risultati di addestramento sono salvati in: {train_files[0]} \n")
-    print(f"execute: tensorboard --logdir={train_files[0]} to see results") 
+    print(f"\n@@@ I risultati di addestramento sono salvati in: {log_dir}")
+    print(f"\texecute: tensorboard --logdir={log_dir} to see results") 
 else:
     print("\n$$$ Attenzione: il file result.json non è stato trovato.")
