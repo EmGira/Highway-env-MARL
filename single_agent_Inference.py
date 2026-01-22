@@ -12,7 +12,7 @@ from pathlib import Path
 CHECKPOINT_PATH = os.path.abspath("./checkpoints/2025-12-30/ID_7")  
 
 
-AGENTS_NR = 2
+AGENTS_NR = 1
 
 # Env config
 ENV_ID = 'highway-v0'
@@ -27,7 +27,7 @@ ENV_CONFIG = {
 
     "lanes_count": 4,
     "vehicles_count": 50,
-    "controlled_vehicles": 1,
+    "controlled_vehicles": AGENTS_NR,
     "initial_lane_id": None,
     "duration": 40, 
     "ego_spacing": 2,
@@ -93,12 +93,11 @@ while not (terminated or truncated):
         flat_obs = np.stack([o.flatten() for o in obs])
         is_multi_agent = True
     else:
-        flat_obs = obs.flatten()[np.newaxis, :]
+        flat_obs = obs.flatten()[np.newaxis, :] #we must add a dimention so that Ray accepts the obs
         is_multi_agent = False
 
+
     obs_batch = torch.from_numpy(flat_obs).unsqueeze(0) 
-
-
     model_outputs = rl_module.forward_inference({"obs": obs_batch})
     action_dist_params = model_outputs["action_dist_inputs"][0].detach().numpy() #add .detach() if the algo requires grad. (ex: SAC)
 

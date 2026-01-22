@@ -19,7 +19,8 @@ checkpoints_dir = Path(f"./checkpoints/{today.strftime('%Y-%m-%d')}")
 nr_of_subdirectories = len([f for f in checkpoints_dir.iterdir() if f.is_dir()])
 
 
-ENV_ID = 'highway-v0'
+
+#CONFIG
 ENV_CONFIG = {
 
     "observation": { 
@@ -48,7 +49,7 @@ ENV_CONFIG = {
     "on_road_reward": 0.1,
     "offroad_terminal": True,
     "reward_config": {
-         "collision_reward": -5.0, # Assicuriamoci che sia passato qui
+         "collision_reward": -5.0, 
     },
     
     
@@ -57,12 +58,12 @@ ENV_CONFIG = {
     "duration": 200, 
 }
 
-tune.register_env("highway_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG))
+tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG))
 
 config = (
     PPOConfig()
     .environment(
-        env = "highway_multiagent"
+        env = "intersection-v1_multiagent"
     )
     .framework("torch")
     .env_runners(
@@ -92,12 +93,14 @@ config = (
     .callbacks(CrashLoggerCallback)
 )
 
-
 algo = config.build_algo()
 log_dir = algo.logdir
 print("@@@ Logging directory: ", log_dir)
 
-for i in range(1):
+
+
+#TRAINING
+for i in range(10):
     result = algo.train()
 
     print(f"Iterazione {i + 1}:")
@@ -107,6 +110,8 @@ for i in range(1):
     print(f"\tNr Passi per agente (Train): {result['env_runners']['agent_steps']}")
 
 
+
+#EVALUATION AND SHUTDOWN
 algo.evaluate()
 
 path = f"./checkpoints/{today.strftime('%Y-%m-%d')}/ID_{nr_of_subdirectories}"
