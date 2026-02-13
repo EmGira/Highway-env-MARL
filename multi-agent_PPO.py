@@ -58,7 +58,7 @@ ENV_CONFIG = {
     "duration": 200, 
 }
 
-tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG))
+tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG)) #TODOO.1 add envID as parameter
 
 config = (
     PPOConfig()

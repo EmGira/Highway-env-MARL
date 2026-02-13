@@ -1,7 +1,12 @@
+#https://docs.ray.io/en/latest/rllib/new-api-stack-migration-guide.html#custom-callbacks
+#https://docs.ray.io/en/latest/rllib/package_ref/doc/ray.rllib.callbacks.callbacks.RLlibCallback.html#ray.rllib.callbacks.callbacks.RLlibCallback
+
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.callbacks.callbacks import RLlibCallback
+
 from ray.rllib.env.multi_agent_episode import MultiAgentEpisode
 
-class CrashLoggerCallback(DefaultCallbacks):
+class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLlibCallback
     def on_episode_start(self, *, episode: MultiAgentEpisode, **kwargs):
         episode.custom_data["n_crashes"] = 0
 

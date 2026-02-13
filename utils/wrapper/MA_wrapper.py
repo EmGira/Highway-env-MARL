@@ -1,3 +1,5 @@
+#https://docs.ray.io/en/latest/rllib/package_ref/env/multi_agent_env.html#multi-agent-env-reference-docs
+
 import gymnasium as gym
 import highway_env
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
@@ -5,7 +7,7 @@ from highway_env.envs.common.abstract import MultiAgentWrapper
 import numpy as np
 
 class RLlibHighwayWrapper(MultiAgentEnv):
-    def __init__(self, config):
+    def __init__(self, config): #TODOO.1 add envID as parameter
         super().__init__()
         sa_env = gym.make("intersection-v1", config=config)
         self.env = MultiAgentWrapper(sa_env)
@@ -63,7 +65,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         if not hasattr(self, '_terminated_agents'):
             self._terminated_agents = set()
         
-        if not hasattr(self, '_step_count'): #TODOO, can be removed, 
+        if not hasattr(self, '_step_count'): #TODOO, can be removed,
             self._step_count = 0
         self._step_count += 1
         
@@ -132,50 +134,4 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         return self.env.render()
 
 
-
-# ENV_CONFIG = {
-#     "controlled_vehicles": 2,
-
-#     "observation": {
-#         "type": "MultiAgentObservation",
-#         "observation_config": {
-#             "type": "Kinematics",
-#         }
-#     },
-
-#     "action": {
-#         "type": "MultiAgentAction",
-#         "action_config": {
-#         "type": "DiscreteMetaAction",
-#         }
-#     },
-# }
-
-
-# env = RLlibHighwayWrapper(ENV_CONFIG)
-
-# print("\nINIT: \n")
-# print("obs space: ", env.observation_space)
-# print("act space: ", env.action_space)
-# print("agents: ", env.agents)
-# obs, info = env.reset()
-
-# print("\nRESET: \n")
-# print("obs: ", obs)
-# print("\ninfo: ", info)
-
-
-
-# test_action_dict = {
-#     "agent_0": 1,
-#     "agent_1": 1
-# }
-
-# obs, rew, terminated, truncated, info = env.step(test_action_dict)
-
-
-# print("\nSTEP:\n")
-# print("Rewards:", rew)
-# print("Terminateds:", terminated)
-# print("truncated:", truncated)
 
