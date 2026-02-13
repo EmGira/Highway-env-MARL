@@ -9,8 +9,10 @@ from utils.callbacks.Callbacks import CrashLoggerCallback
 import highway_env
 from highway_env.envs.common.abstract import MultiAgentWrapper
 
+from configs.intersection.IntersectionConfigs import get_multi_agent_config
 
 
+import pprint 
 import os
 import torch
 import numpy as np
@@ -27,47 +29,11 @@ ACTIONS_ALL = {
         4: 'SLOWER'
     }
 
-CHECKPOINT_PATH = os.path.abspath("./checkpoints/2026-01-18/ID_5")  
+CHECKPOINT_PATH = os.path.abspath("./checkpoints/2026-02-13/ID_0")  
 
 
 NR_AGENTS = 2
-ENV_CONFIG = {
-
-    "observation": { 
-        "type": "MultiAgentObservation",
-        "observation_config": { "type": "Kinematics" }
-    },
-    "action": { 
-        "type": "MultiAgentAction",
-        "action_config": { "type": "DiscreteMetaAction" }
-    },
-
- 
-    "controlled_vehicles": NR_AGENTS,
-    "vehicles_count": 10, 
-
-    "reward_speed_range": [10, 30], 
-    
- 
-    "collision_reward": -5.0, 
-    
-   
-    "high_speed_reward": 1, 
-    "arrived_reward": 5.0, 
-
-    "on_road_reward": 0.1,
-    "offroad_terminal": True,
-    "reward_config": {
-         "collision_reward": -5.0, 
-    },
-    
-    
-    "normalize_reward": False, 
-    
-    "duration": 200, 
-}
-
-
+ENV_CONFIG = get_multi_agent_config(num_agents=NR_AGENTS)
 
 multi_rl_module = MultiRLModule.from_checkpoint(
     Path(CHECKPOINT_PATH)
@@ -77,49 +43,68 @@ multi_rl_module = MultiRLModule.from_checkpoint(
 )
 
 
-
-print("\n--- Avvio Rendering del modello addestrato su nuovo enviroment di test ---")
-
-sa_env = gym.make("intersection-v1", render_mode = "rgb_array", config=ENV_CONFIG)
+RENDER_MODE = None
+sa_env = gym.make("intersection-v1", render_mode = RENDER_MODE, config=ENV_CONFIG)
 ma_env = MultiAgentWrapper(sa_env)
 
-obs, info = ma_env.reset()
-done = truncated = False
 
-episode_rewards = [0.0] * NR_AGENTS
 
-while not (done or truncated):
+NUM_TEST_EPISODES = 20
+
+success_count = 0
+crash_count = 0
+total_rewards = []
+
+print(f"--- Validation over {NUM_TEST_EPISODES} episodes ---")
+
+for ep in range(NUM_TEST_EPISODES):
+
+    obs, info = ma_env.reset()
+    done = [False] * NR_AGENTS
+    truncated = False
+    ep_reward = 0
     
-    if isinstance(obs, (tuple, list)):
+    while not (all(done) or truncated):
+       
         flat_obs = np.stack([o.flatten() for o in obs], axis=0)
-        is_multi_agent = True
-    else: #TODOO in this case the check can be removed as this will always be a list of observations
-        flat_obs = obs.flatten()[np.newaxis, :] #we must add a dimention so that Ray accepts the obs
-        is_multi_agent = False
+        agents_obs = [torch.from_numpy(o).float().unsqueeze(0) for o in flat_obs]
+        
+       
+        with torch.no_grad(): # No need to track operations
+            agents_outputs = [multi_rl_module[f"agent_{i}"].forward_inference({"obs": ao}) for ao, i in zip(agents_obs, range(NR_AGENTS))]
+            agents_actions = [torch.argmax(out["action_dist_inputs"], dim=1).item() for out in agents_outputs]
 
+       
+        obs, reward, done, truncated, info = ma_env.step(tuple(agents_actions))
+        ep_reward += sum(reward)
+        
 
+        
+        if RENDER_MODE == "human":
+            ma_env.render()
 
-    agents_obs = [torch.from_numpy(o).float().unsqueeze(0) for o in flat_obs]
-    agents_outputs = [multi_rl_module[f"agent_{i}"].forward_inference({"obs": agent_o}) for agent_o, i in zip(agents_obs, range(NR_AGENTS))]
-    agents_actions = [torch.argmax(out["action_dist_inputs"], dim=1) for out in agents_outputs] 
-
-    action_set = tuple(a for a in agents_actions)
     
+    is_crashed = info.get('crashed', False)
+    is_success = all(done) and not is_crashed
+
+    if is_success:
+        success_count += 1
+    if is_crashed:
+        crash_count += 1
 
     
-    obs, reward, done, truncated, info = ma_env.step(action_set)
-    ma_env.render()
     
-    for i in range(NR_AGENTS):
-        episode_rewards[i] += reward[i]
+    total_rewards.append(ep_reward)
+    print(f"Episodio {ep+1}: {'SUCCESS' if is_success else 'FAILED'} | Reward: {ep_reward:.2f}")
 
 
-print(f"Total rewards per agent: {episode_rewards}")
-print(f"Total episode return: {sum(episode_rewards)}")
 
-ma_env.close()
+success_rate = (success_count / NUM_TEST_EPISODES) * 100
+avg_reward = np.mean(total_rewards)
 
-
-ray.shutdown()
-
-
+print("\n" + "="*30)
+print(f"Results ({NUM_TEST_EPISODES} episodes)")
+print(f"Success Rate: {success_rate}% ")
+print(f"Crash Rate:   {(crash_count/NUM_TEST_EPISODES)*100}% ")
+print(f"Average Reward: {avg_reward:.2f}")
+print("="*30)
