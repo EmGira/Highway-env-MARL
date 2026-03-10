@@ -29,7 +29,7 @@ ACTIONS_ALL = {
         4: 'SLOWER'
     }
 
-CHECKPOINT_PATH = os.path.abspath("./checkpoints/2026-02-13/ID_0")  
+CHECKPOINT_PATH = os.path.abspath("./A-checkpoints/2026-03-10/ID_0")  
 
 
 NR_AGENTS = 2

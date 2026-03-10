@@ -7,9 +7,9 @@ from highway_env.envs.common.abstract import MultiAgentWrapper
 import numpy as np
 
 class RLlibHighwayWrapper(MultiAgentEnv):
-    def __init__(self, config): #TODOO.1 add envID as parameter
+    def __init__(self, config, env_id): #TODOO.1 add envID as parameter
         super().__init__()
-        sa_env = gym.make("intersection-v1", config=config)
+        sa_env = gym.make(env_id, config=config) #"intersection-v1"
         self.env = MultiAgentWrapper(sa_env)
 
         
