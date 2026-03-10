@@ -1,5 +1,6 @@
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 from utils.callbacks.Callbacks import CrashLoggerCallback
+from configs.intersection.IntersectionConfigs import get_multi_agent_config
 import highway_env
 
 from ray import tune
@@ -12,53 +13,21 @@ import datetime
 
 today = datetime.date.today()
 
-if not os.path.isdir(f"./checkpoints/{today.strftime('%Y-%m-%d')}"):
-    os.mkdir(f"./checkpoints/{today.strftime('%Y-%m-%d')}")
+if not os.path.isdir(f"./A-checkpoints/{today.strftime('%Y-%m-%d')}"):
+    os.mkdir(f"./A-checkpoints/{today.strftime('%Y-%m-%d')}")
 
-checkpoints_dir = Path(f"./checkpoints/{today.strftime('%Y-%m-%d')}")
+checkpoints_dir = Path(f"./A-checkpoints/{today.strftime('%Y-%m-%d')}")
 nr_of_subdirectories = len([f for f in checkpoints_dir.iterdir() if f.is_dir()])
 
 
 
 #CONFIG
-ENV_CONFIG = {
+NR_AGENTS = 2
+ENV_CONFIG = get_multi_agent_config(NR_AGENTS)
+ENV_CONFIG["duration"] = 200
 
-    "observation": { 
-        "type": "MultiAgentObservation",
-        "observation_config": { "type": "Kinematics" }
-    },
-    "action": { 
-        "type": "MultiAgentAction",
-        "action_config": { "type": "DiscreteMetaAction" }
-    },
 
- 
-    "controlled_vehicles": 2,
-    "vehicles_count": 10, 
-
-    # Intersections need to reward slower speeds compared to highway.
-    "reward_speed_range": [10, 30], 
-    
-    # heavy collision punishment so agents quickly learn NOT to crash
-    "collision_reward": -5.0, 
-    
-    #reward for staying alive and exiting the intersection
-    "high_speed_reward": 1, 
-    "arrived_reward": 5.0, 
-
-    "on_road_reward": 0.1,
-    "offroad_terminal": True,
-    "reward_config": {
-         "collision_reward": -5.0, 
-    },
-    
-    
-    "normalize_reward": False, 
-    
-    "duration": 200, 
-}
-
-tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG)) #TODOO.1 add envID as parameter
+tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "intersection-v1")) #TODOO.1 add envID as parameter
 
 config = (
     PPOConfig()
@@ -114,7 +83,7 @@ for i in range(10):
 #EVALUATION AND SHUTDOWN
 algo.evaluate()
 
-path = f"./checkpoints/{today.strftime('%Y-%m-%d')}/ID_{nr_of_subdirectories}"
+path = f"./A-checkpoints/{today.strftime('%Y-%m-%d')}/ID_{nr_of_subdirectories}"
 saved_results = algo.save(checkpoint_dir = os.path.abspath(path))
 checkpoint_dir = saved_results.checkpoint.path
 
