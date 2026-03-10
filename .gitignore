@@ -1,9 +1,9 @@
 /venv
-/tests
+/A-tests
+/A-checkpoints/*
+/A-dependencies
 /resources.txt
-/checkpoints/*
 /Notes.md
-/dependencies
 /resources.txt
 __pycache__
 /.vscode
