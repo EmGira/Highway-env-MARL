@@ -4,7 +4,7 @@ from configs.intersection.IntersectionConfigs import get_multi_agent_config
 import highway_env
 
 from ray import tune
-from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.sac import SACConfig
 
 import os
 import glob
@@ -30,7 +30,7 @@ ENV_CONFIG["duration"] = 200
 tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "intersection-v1")) #TODOO.1 add envID as parameter
 
 config = (
-    PPOConfig()
+    SACConfig()
     .environment(
         env = "intersection-v1_multiagent"
     )
@@ -48,15 +48,25 @@ config = (
         evaluation_interval=5,
         evaluation_duration=20,
         evaluation_duration_unit="episodes",
-   
-        )
+
+    )
     .training(
-      
-        train_batch_size_per_learner=4000, #total train_batch_size = 4000 * 1 learner
-        minibatch_size = 256,
-        num_epochs = 10,
-        
-        lr=5e-5 
+         #uses two Q-networks for value action estimation, to experiment with in future
+        n_step=1,
+
+        train_batch_size = 256,
+        num_steps_sampled_before_learning_starts = 2000,
+
+        lr=None,
+        #default values!
+        actor_lr=3e-5,
+        critic_lr=3e-4,
+        alpha_lr=3e-4,
+
+        replay_buffer_config={
+            "type": "MultiAgentEpisodeReplayBuffer",
+            "capacity": 50000,
+        }
     )
     .learners(
         num_learners=1,
@@ -65,6 +75,7 @@ config = (
     .multi_agent(
         policies={"agent_0", "agent_1"}, 
         policy_mapping_fn=lambda agent_id, episode, **kwargs: agent_id, 
+        count_steps_by="env_steps"
     )
     .callbacks(CrashLoggerCallback)
 )
@@ -76,7 +87,7 @@ print("@@@ Logging directory: ", log_dir)
 
 
 #TRAINING
-for i in range(5):
+for i in range(100):
     result = algo.train()
 
     print(f"Iterazione {i + 1}:")
