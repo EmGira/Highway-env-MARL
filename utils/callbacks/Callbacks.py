@@ -3,7 +3,6 @@
 
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.callbacks.callbacks import RLlibCallback
-
 from ray.rllib.env.multi_agent_episode import MultiAgentEpisode
 
 class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLlibCallback
@@ -27,3 +26,24 @@ class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLli
         
         if metrics_logger:
             metrics_logger.log_value("crashes_total", crashes)
+
+
+#https://github.com/ray-project/ray/issues/51560#issuecomment-2758195710 thread for AdamBetas Fix
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from torch import Tensor
+
+class FixAdamBetasCallback(DefaultCallbacks):
+    
+
+    def on_checkpoint_loaded(self, *, algorithm, **kwargs) -> None:
+         
+        def betas_tensor_to_float(learner):
+            for param_grp_key in learner._optimizer_parameters.keys():
+                param_grp = param_grp_key.param_groups[0]
+                param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+
+                if "betas" in param_grp and isinstance(param_grp["betas"][0], Tensor):
+                    param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+                    
+        
+        algorithm.learner_group.foreach_learner(betas_tensor_to_float)
