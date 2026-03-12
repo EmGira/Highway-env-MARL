@@ -1,10 +1,17 @@
+#https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CheckpointConfig.html#ray.tune.CheckpointConfig
+#https://docs.ray.io/en/latest/tune/api/doc/ray.tune.RunConfig.html#ray.tune.RunConfig
+#https://github.com/ray-project/ray/issues/51560#issuecomment-2758195710 thread for AdamBetas Fix
+
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
-from utils.callbacks.Callbacks import CrashLoggerCallback
+from utils.callbacks.Callbacks import CrashLoggerCallback, FixAdamBetasCallback
 from configs.intersection.IntersectionConfigs import get_multi_agent_config
 import highway_env
 
 from ray import tune
+from ray.tune import RunConfig, CheckpointConfig, FailureConfig
+
 from ray.rllib.algorithms.ppo import PPOConfig
+
 
 import os
 import glob
@@ -48,15 +55,22 @@ config = (
         evaluation_interval=5,
         evaluation_duration=20,
         evaluation_duration_unit="episodes",
+        
+        # evaluation_config={
+        #     "env": "intersection-v1_multiagent",
+        #     "explore": False, 
+        # }
    
         )
     .training(
-      
+    
         train_batch_size_per_learner=4000, #total train_batch_size = 4000 * 1 learner
         minibatch_size = 256,
         num_epochs = 10,
         
-        lr=5e-5 
+     
+        #lr=tune.grid_search([1e-4, 5e-5]) #this tells Tune to try both options with two trainings in parallel execution
+        lr = 5e-5
     )
     .learners(
         num_learners=1,
@@ -66,46 +80,67 @@ config = (
         policies={"agent_0", "agent_1"}, 
         policy_mapping_fn=lambda agent_id, episode, **kwargs: agent_id, 
     )
-    .callbacks(CrashLoggerCallback)
+    .callbacks([CrashLoggerCallback, FixAdamBetasCallback] )
+
 )
 
-algo = config.build_algo()
-log_dir = algo.logdir
-print("@@@ Logging directory: ", log_dir)
+
+
+run_config = RunConfig(
+
+    name=f"Run_{today.strftime('%Y-%m-%d')}_ID_{nr_of_subdirectories}",
+    storage_path=os.path.abspath(checkpoints_dir),
+    
+    stop={"training_iteration": 500},
+
+    failure_config=FailureConfig(
+        max_failures=0,
+    ),
+
+    callbacks=None,
+
+   
+    checkpoint_config=CheckpointConfig(
+        num_to_keep = 5,  # keep the 5 most recent checkpoints from training
+        checkpoint_score_attribute = "env_runners/episode_return_mean", # The attribute that will be used to score checkpoints to determine which checkpoints should be kept
+        checkpoint_score_order = 'max',
+        checkpoint_frequency=10, #save a checkpoint every 10 iterations
+        checkpoint_at_end=True  #always save checkpoint at end of training
+         
+
+    )
+)
+
+
+# tuner = tune.Tuner(
+#     "PPO",                      
+#     param_space=config,         
+#     run_config=run_config       
+# )
+
+
+tuner = tune.Tuner.restore(   #to restore from checkpoint
+    path=os.path.abspath("./A-checkpoints/2026-03-12/Run_2026-03-12_ID_1"), 
+    trainable="PPO",
+    resume_unfinished=True,
+    resume_errored = True,
+
+    param_space=config,
+
+)
+
+
+#TRAIN
+print("\n@@@ Initializing training...")
+results = tuner.fit()
 
 
 
-#TRAINING
-for i in range(5):
-    result = algo.train()
-
-    print(f"Iterazione {i + 1}:")
-    print(f"\tRicompensa Media (Train): {result['env_runners']['episode_return_mean']:.2f}")        #average total reward (sum of all agents rewards) 
-    print(f"\tLunghezza Media (Train): {result['env_runners']['episode_len_mean']:.2f}")            #average total nr of steps per episode (until all agents terminated)
-    print(f"\tRicompensa Media per agente (Train): {result['env_runners']['agent_episode_returns_mean']}")
-    print(f"\tNr Passi per agente (Train): {result['env_runners']['agent_steps']}")
-
-
-
-#EVALUATION AND SHUTDOWN
-algo.evaluate()
-
-path = f"./A-checkpoints/{today.strftime('%Y-%m-%d')}/ID_{nr_of_subdirectories}"
-saved_results = algo.save(checkpoint_dir = os.path.abspath(path))
-checkpoint_dir = saved_results.checkpoint.path
-
-if checkpoint_dir:
-    print(f"\n@@@ Checkpoint salvato correttamente!")
-    print(f"\t Percorso: {checkpoint_dir}\n")
-
-algo.stop()
-
-
-
-train_files = glob.glob(os.path.join(log_dir, "result.json"))
-
-if train_files:
-    print(f"\n@@@ I risultati di addestramento sono salvati in: {log_dir}")
-    print(f"\texecute: tensorboard --logdir={log_dir} to see results") 
-else:
-    print("\n$$$ Attenzione: il file result.json non è stato trovato.")
+#EXTRACT
+best_result = results.get_best_result(
+    metric = run_config.checkpoint_config.checkpoint_score_attribute, 
+    mode = run_config.checkpoint_config.checkpoint_score_order
+)
+print("\n@@@ Training completed!")
+print(f"\t Results store here ==> {best_result.path}")
+print(f"\t For TensoBoard, execute ==> tensorboard --logdir={best_result.path}")

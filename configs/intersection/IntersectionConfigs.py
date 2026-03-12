@@ -33,6 +33,9 @@ def get_multi_agent_config(num_agents=2, obs_type="Kinematics"):
             "collision_reward": -5.0, 
         },
         
+        "offscreen_rendering": False, 
+        "render_mode": None,
+        
         
         "normalize_reward": False, 
         
