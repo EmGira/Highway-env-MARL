@@ -9,12 +9,14 @@ import numpy as np
 class RLlibHighwayWrapper(MultiAgentEnv):
     def __init__(self, config, env_id): #TODOO.1 add envID as parameter
         super().__init__()
-        sa_env = gym.make(env_id, config=config) #"intersection-v1"
+        sa_env = gym.make(env_id, render_mode=None, config=config) #"intersection-v1"
         self.env = MultiAgentWrapper(sa_env)
 
         
         self._agent_list = [f"agent_{i}" for i in range(config["controlled_vehicles"])]
         self._agent_ids = set(self._agent_list)
+
+         #TODOO deletable
         self.agents = self._agent_ids
         self.possible_agents = self._agent_ids
     
@@ -43,16 +45,18 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             for i, agent_id in enumerate(self._agent_list)
         })
 
-        self._obs_space_in_preferred_format = True #TODOO try removing these, shouldn't be an issue
+        self._obs_space_in_preferred_format = True #TODOO try removing these
         self._action_space_in_preferred_format = True
 
 
     def reset(self, *, seed=None, options=None):
+        self._terminated_agents = set()
+
         obs, info = self.env.reset(seed=seed, options=options)
         
         # obs are flattened in the wrapper (flattenobservations() in the algorithm config caused errors)
         flat_obs = {
-            agent_id: obs[i].flatten() 
+            agent_id: obs[i].flatten().astype(np.float32)
             for i, agent_id in enumerate(self._agent_list)
         }
         
@@ -61,13 +65,11 @@ class RLlibHighwayWrapper(MultiAgentEnv):
 
     def step(self, action_dict):
         # Tracking agents that terminated: 
-        # we need to do this because RLlib requires that agents that have terminated shouldnt return their reward
+        # we need to do this because RLlib requires that agents that have terminated dont return their reward
         if not hasattr(self, '_terminated_agents'):
             self._terminated_agents = set()
         
-        if not hasattr(self, '_step_count'): #TODOO, can be removed,
-            self._step_count = 0
-        self._step_count += 1
+        
         
         
         if not action_dict:
@@ -92,8 +94,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         
         #execute actions in the enviroment and compute the results in the format required by RayRLlib
         obs, rewards, dones, truncated, info = self.env.step(actions)
-
-        
+    
         obs_dict = {}
         rew_dict = {}
         term_dict = {}
@@ -118,7 +119,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
     
         info_dict = {agent_id: info for agent_id in obs_dict.keys()}
 
-        
+       
         
         # __all__ is true when all agents have completed the episode
         term_dict["__all__"] = all(dones)
@@ -126,12 +127,19 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         if term_dict["__all__"]:
             self._terminated_agents = set()
             
-
+ 
         return obs_dict, rew_dict, term_dict, trunc_dict, info_dict
 
 
     def render(self):
         return self.env.render()
+
+    
+    def close(self):
+        if hasattr(self.env, 'close'):
+            self.env.close()
+        if hasattr(super(), 'close'):
+            super().close()
 
 
 

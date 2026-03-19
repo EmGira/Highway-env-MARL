@@ -4,15 +4,16 @@
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.callbacks.callbacks import RLlibCallback
 from ray.rllib.env.multi_agent_episode import MultiAgentEpisode
+from torch.cuda import empty_cache
 
 class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLlibCallback
     def on_episode_start(self, *, episode: MultiAgentEpisode, **kwargs):
         episode.custom_data["n_crashes"] = 0
-
+        
     def on_episode_step(self, *, episode: MultiAgentEpisode, **kwargs):
 
         agent_rewards = episode.get_rewards()
-
+        
         for reward_list in agent_rewards.values():
            for r in reward_list:
                 
@@ -23,9 +24,12 @@ class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLli
     def on_episode_end(self, *, episode: MultiAgentEpisode, metrics_logger=None, **kwargs):    
 
         crashes = episode.custom_data.get("n_crashes", 0)
-        
+        has_crashed = 1 if crashes > 0 else 0
+
         if metrics_logger:
-            metrics_logger.log_value("crashes_total", crashes)
+            metrics_logger.log_value("crash_incident_rate", has_crashed)
+
+        empty_cache()
 
 
 #https://github.com/ray-project/ray/issues/51560#issuecomment-2758195710 thread for AdamBetas Fix

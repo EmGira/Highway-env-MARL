@@ -4,19 +4,27 @@
 
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 from utils.callbacks.Callbacks import CrashLoggerCallback, FixAdamBetasCallback
-from configs.intersection.IntersectionConfigs import get_multi_agent_config
+from configs.intersection.IntersectionConfigs import get_default_multi_agent_config, get_busy_intersection_config
 import highway_env
 
+import ray
+from ray import shutdown
 from ray import tune
 from ray.tune import RunConfig, CheckpointConfig, FailureConfig
 
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.tune.schedulers import ASHAScheduler
 
 
 import os
-import glob
 from pathlib import Path
 import datetime
+
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+
+if ray.is_initialized():
+    ray.shutdown()
+ray.init(object_store_memory=500 * 1024 * 1024)
 
 today = datetime.date.today()
 
@@ -30,8 +38,8 @@ nr_of_subdirectories = len([f for f in checkpoints_dir.iterdir() if f.is_dir()])
 
 #CONFIG
 NR_AGENTS = 2
-ENV_CONFIG = get_multi_agent_config(NR_AGENTS)
-ENV_CONFIG["duration"] = 200
+ENV_CONFIG = get_busy_intersection_config(NR_AGENTS)
+#ENV_CONFIG["duration"] = 200
 
 
 tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "intersection-v1")) #TODOO.1 add envID as parameter
@@ -43,37 +51,46 @@ config = (
     )
     .framework("torch")
     .env_runners(
-        num_env_runners=4,  #engaging 4 gpu cores
-        num_envs_per_env_runner=1, #each core simulating 2 envs
+        num_env_runners=2,  #engaging 4 gpu cores
+        num_envs_per_env_runner=1, #each core simulating 1 envs
 
         #env_to_module_connector=lambda env, spaces, device: FlattenObservations(), this caused issues, flattening happens in the MA_wrapper now
         sample_timeout_s=200.0,
-        rollout_fragment_length="auto" 
+        rollout_fragment_length="auto",  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
+
+        explore = True,
+
+        
     )
     .evaluation(
-        evaluation_num_env_runners=1,
+        evaluation_num_env_runners=0,
         evaluation_interval=5,
         evaluation_duration=20,
         evaluation_duration_unit="episodes",
         
-        # evaluation_config={
-        #     "env": "intersection-v1_multiagent",
-        #     "explore": False, 
-        # }
-   
-        )
-    .training(
     
-        train_batch_size_per_learner=4000, #total train_batch_size = 4000 * 1 learner
-        minibatch_size = 256,
+   
+    )
+    .training(
+        #GENERAL RL configs
+        train_batch_size_per_learner = 1024,  #total train_batch_size = 2048 * 1 learner
+        minibatch_size = 68,
         num_epochs = 10,
         
-     
-        #lr=tune.grid_search([1e-4, 5e-5]) #this tells Tune to try both options with two trainings in parallel execution
-        lr = 5e-5
+   
+        
+        lr = tune.grid_search([5e-4, 1e-4]), # 1e-4
+        gamma = 0.99,
+
+        #PPO specific configs
+
+        use_critic = True,
+        use_gae= True,
+        lambda_= 1, #default = 1
+
     )
     .learners(
-        num_learners=1,
+        num_learners=0,
         num_gpus_per_learner=1
     )
     .multi_agent(
@@ -85,10 +102,9 @@ config = (
 )
 
 
-
 run_config = RunConfig(
 
-    name=f"Run_{today.strftime('%Y-%m-%d')}_ID_{nr_of_subdirectories}",
+    name=f"RunID_{nr_of_subdirectories}",
     storage_path=os.path.abspath(checkpoints_dir),
     
     stop={"training_iteration": 500},
@@ -101,8 +117,8 @@ run_config = RunConfig(
 
    
     checkpoint_config=CheckpointConfig(
-        num_to_keep = 5,  # keep the 5 most recent checkpoints from training
-        checkpoint_score_attribute = "env_runners/episode_return_mean", # The attribute that will be used to score checkpoints to determine which checkpoints should be kept
+        num_to_keep = 3,  # keep the 3 most recent (or best) checkpoints from training
+        checkpoint_score_attribute = "env_runners/episode_return_mean", # The attribute that will be used to score checkpoints to determine which of the *num_to_keep* checkpoints should be kept
         checkpoint_score_order = 'max',
         checkpoint_frequency=10, #save a checkpoint every 10 iterations
         checkpoint_at_end=True  #always save checkpoint at end of training
@@ -112,25 +128,34 @@ run_config = RunConfig(
 )
 
 
+def custom_trial_dirname(trial):
+    # Prende il valore del batch size scelto per questo trial
+    batch_size = config["training"].get("train_batch_size_per_learner", "Unknown")
+    lr = trial.evaluated_params.get("lr", "Unknown")
+    return f"PPO_Batch_{batch_size}-lr_{lr}_ID_{trial.trial_id}"
+
 # tuner = tune.Tuner(
-#     "PPO",                      
+#     "PPO",
+#     tune_config=tune.TuneConfig(
+#         num_samples=1,
+#         # scheduler=ASHAScheduler(metric="env_runners/episode_return_mean", mode= "max", grace_period=50, max_t=run_config.stop["training_iteration"]),
+#         trial_dirname_creator=custom_trial_dirname,
+#         trial_name_creator=lambda trial: f"Experiment_{trial.trial_id}"
+#     ),            
 #     param_space=config,         
-#     run_config=run_config       
+#     run_config=run_config,    
 # )
 
 
 tuner = tune.Tuner.restore(   #to restore from checkpoint
-    path=os.path.abspath("./A-checkpoints/2026-03-12/Run_2026-03-12_ID_1"), 
+    path=os.path.abspath("./A-checkpoints/2026-03-18/Run_2026-03-18_ID_0"), 
     trainable="PPO",
     resume_unfinished=True,
     resume_errored = True,
-
-    param_space=config,
-
 )
 
 
-#TRAIN
+#TRAINd
 print("\n@@@ Initializing training...")
 results = tuner.fit()
 
@@ -144,3 +169,5 @@ best_result = results.get_best_result(
 print("\n@@@ Training completed!")
 print(f"\t Results store here ==> {best_result.path}")
 print(f"\t For TensoBoard, execute ==> tensorboard --logdir={best_result.path}")
+
+shutdown()
