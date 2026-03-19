@@ -9,7 +9,7 @@ from utils.callbacks.Callbacks import CrashLoggerCallback
 import highway_env
 from highway_env.envs.common.abstract import MultiAgentWrapper
 
-from configs.intersection.IntersectionConfigs import get_multi_agent_config
+from configs.intersection.IntersectionConfigs import get_multi_agent_config, get_default_multi_agent_config, get_busy_intersection_config
 
 
 import pprint 
@@ -29,11 +29,13 @@ ACTIONS_ALL = {
         4: 'SLOWER'
     }
 
-CHECKPOINT_PATH = os.path.abspath("./A-checkpoints/2026-03-12/Run_2026-03-12_ID_1/PPO_intersection-v1_multiagent_38496_00000_0_2026-03-12_15-17-36/checkpoint_000006")  
+CHECKPOINT_PATH = os.path.abspath("./A-checkpoints/2026-03-18/Run_2026-03-18_ID_0/PPO_Batch_Unknown-lr_0.0005_ID_803dd_00000/checkpoint_000049")  
 
 
 NR_AGENTS = 2
-ENV_CONFIG = get_multi_agent_config(num_agents=NR_AGENTS)
+ENV_CONFIG = get_busy_intersection_config(num_agents=NR_AGENTS)
+ENV_CONFIG["simulation_frequency"] = 15
+
 
 multi_rl_module = MultiRLModule.from_checkpoint(
     Path(CHECKPOINT_PATH)
@@ -43,7 +45,7 @@ multi_rl_module = MultiRLModule.from_checkpoint(
 )
 
 
-RENDER_MODE = None
+RENDER_MODE = "human"
 sa_env = gym.make("intersection-v1", render_mode = RENDER_MODE, config=ENV_CONFIG)
 ma_env = MultiAgentWrapper(sa_env)
 
@@ -77,13 +79,14 @@ for ep in range(NUM_TEST_EPISODES):
        
         obs, reward, done, truncated, info = ma_env.step(tuple(agents_actions))
         ep_reward += sum(reward)
-        
 
-        
-        if RENDER_MODE == "human":
+        if RENDER_MODE != None:
             ma_env.render()
 
-    
+
+    # print(f"EPISODE: {ep+1}")
+    # pprint.pprint(info)    
+
     is_crashed = info.get('crashed', False)
     is_success = all(done) and not is_crashed
 

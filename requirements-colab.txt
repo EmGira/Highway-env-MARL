@@ -1,0 +1,15 @@
+gymnasium>=1.0.0
+hydra-core
+matplotlib
+# numpy --> RIMOSSO (usiamo quello di Colab)
+omegaconf
+pytest
+PyYAML
+ray[rllib]>=2.10.0
+# setuptools --> RIMOSSO (usiamo quello di Colab)
+tensordict
+# torch --> RIMOSSO (usiamo quello di Colab)
+torch_geometric
+torchrl
+tqdm
+-e ../HighwayEnv-MA-Compatible
