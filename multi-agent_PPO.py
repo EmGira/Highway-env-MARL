@@ -24,7 +24,8 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 if ray.is_initialized():
     ray.shutdown()
-ray.init(object_store_memory=500 * 1024 * 1024)
+ray.init(object_store_memory=800 * 1024 * 1024)
+
 
 today = datetime.date.today()
 
@@ -51,14 +52,14 @@ config = (
     )
     .framework("torch")
     .env_runners(
-        num_env_runners=2,  #engaging 4 gpu cores
+        num_env_runners=6,  #engaging 4 gpu cores
         num_envs_per_env_runner=1, #each core simulating 1 envs
 
         #env_to_module_connector=lambda env, spaces, device: FlattenObservations(), this caused issues, flattening happens in the MA_wrapper now
         sample_timeout_s=200.0,
         rollout_fragment_length="auto",  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
 
-        explore = True,
+       
 
         
     )
@@ -73,13 +74,13 @@ config = (
     )
     .training(
         #GENERAL RL configs
-        train_batch_size_per_learner = 1024,  #total train_batch_size = 2048 * 1 learner
-        minibatch_size = 68,
-        num_epochs = 10,
+        train_batch_size_per_learner = tune.grid_search([2048]),  #total train_batch_size = 2048 * 1 learner
+        minibatch_size = 128,
+        num_epochs = 5,
         
    
         
-        lr = tune.grid_search([5e-4, 1e-4]), # 1e-4
+        lr = tune.grid_search([1e-4]), # 1e-4
         gamma = 0.99,
 
         #PPO specific configs
@@ -90,7 +91,7 @@ config = (
 
     )
     .learners(
-        num_learners=0,
+        num_learners=1,
         num_gpus_per_learner=1
     )
     .multi_agent(
@@ -129,33 +130,34 @@ run_config = RunConfig(
 
 
 def custom_trial_dirname(trial):
-    # Prende il valore del batch size scelto per questo trial
-    batch_size = config["training"].get("train_batch_size_per_learner", "Unknown")
-    lr = trial.evaluated_params.get("lr", "Unknown")
+
+    batch_size = trial.config.get("_train_batch_size_per_learner")
+    lr = trial.config.get("lr")
     return f"PPO_Batch_{batch_size}-lr_{lr}_ID_{trial.trial_id}"
 
-# tuner = tune.Tuner(
-#     "PPO",
-#     tune_config=tune.TuneConfig(
-#         num_samples=1,
-#         # scheduler=ASHAScheduler(metric="env_runners/episode_return_mean", mode= "max", grace_period=50, max_t=run_config.stop["training_iteration"]),
-#         trial_dirname_creator=custom_trial_dirname,
-#         trial_name_creator=lambda trial: f"Experiment_{trial.trial_id}"
-#     ),            
-#     param_space=config,         
-#     run_config=run_config,    
-# )
-
-
-tuner = tune.Tuner.restore(   #to restore from checkpoint
-    path=os.path.abspath("./A-checkpoints/2026-03-18/Run_2026-03-18_ID_0"), 
-    trainable="PPO",
-    resume_unfinished=True,
-    resume_errored = True,
+tuner = tune.Tuner(
+    "PPO",
+    tune_config=tune.TuneConfig(
+        num_samples=1,
+        # scheduler=ASHAScheduler(metric="env_runners/episode_return_mean", mode= "max", grace_period=50, max_t=run_config.stop["training_iteration"]),
+        trial_dirname_creator=custom_trial_dirname,
+        trial_name_creator=lambda trial: f"Experiment_{trial.trial_id}"
+    ),            
+    param_space=config,         
+    run_config=run_config,    
 )
 
 
-#TRAINd
+# tuner = tune.Tuner.restore(   #to restore from checkpoint
+#     path=os.path.abspath(""), 
+#     trainable="PPO",
+#     resume_unfinished=True,
+#     resume_errored = True,
+
+# )
+
+
+#TRAIN
 print("\n@@@ Initializing training...")
 results = tuner.fit()
 
