@@ -1,6 +1,6 @@
 /venv
 /A-tests
-/tests
+/tests.py
 
 /A-checkpoints/*
 /A-dependencies

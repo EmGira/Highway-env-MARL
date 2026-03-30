@@ -1,6 +1,53 @@
-
-
 def get_default_multi_agent_config(num_agents=2, obs_type="Kinematics"):
+
+    return {
+                "observation": { 
+                    "type": "MultiAgentObservation",
+                    "observation_config": { 
+                        "type": "Kinematics",
+                        "vehicles_count": 15,  
+                        "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
+                        "features_range": {
+                            "x": [-100, 100],
+                            "y": [-100, 100],
+                            "vx": [-20, 20],
+                            "vy": [-20, 20],
+                        },
+                        "absolute": True,
+                        "flatten": False,
+                        "observe_intentions": False,
+                    }
+                },
+
+                "action": {
+                    "type": "MultiAgentAction",
+                    "action_config": {
+                        "type": "DiscreteMetaAction",
+                        "longitudinal": True,
+                        "lateral": False,
+                        "target_speeds": [0, 4.5, 9],
+                    }
+                    
+                },
+                
+                "duration": 13,  # [s]
+                "destination": "o1",
+                "controlled_vehicles": num_agents,
+                "initial_vehicle_count": 10,
+                "spawn_probability": 0.6,
+                "screen_width": 600,
+                "screen_height": 600,
+                "centering_position": [0.5, 0.6],
+                "scaling": 5.5 * 1.3,
+                "collision_reward": -5,
+                "high_speed_reward": 1,
+                "arrived_reward": 1,
+                "reward_speed_range": [7.0, 9.0],
+                "normalize_reward": False,
+                "offroad_terminal": False,
+            }
+
+def get_simple_multi_agent_config(num_agents=2, obs_type="Kinematics"):
 
     return {
               
@@ -34,7 +81,12 @@ def get_default_multi_agent_config(num_agents=2, obs_type="Kinematics"):
                 },
 
                 "duration": 13,  # [s]
+
+                "spawn_points": ["3", "0"],
+
                 "destination": "o1",
+                "multi_destinations": ["o1", "o3", "o2"],
+
                 "controlled_vehicles": num_agents,
                 "initial_vehicle_count": 1,
                 "spawn_probability": 0.6,
