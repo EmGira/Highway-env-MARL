@@ -9,8 +9,8 @@ from utils.callbacks.Callbacks import CrashLoggerCallback
 import highway_env
 from highway_env.envs.common.abstract import MultiAgentWrapper
 
-from configs.intersection.IntersectionConfigs import get_multi_agent_config, get_default_multi_agent_config, get_busy_intersection_config
-
+from configs.intersection.IntersectionConfigs import get_multi_agent_config, get_default_multi_agent_config, get_busy_intersection_config, get_simple_multi_agent_config
+from configs.CustomMerge.customMergeConfigs import get_default_custom_env_config
 
 import pprint 
 import os
@@ -29,12 +29,16 @@ ACTIONS_ALL = {
         4: 'SLOWER'
     }
 
-CHECKPOINT_PATH = os.path.abspath("./A-checkpoints/2026-03-18/Run_2026-03-18_ID_0/PPO_Batch_Unknown-lr_0.0005_ID_803dd_00000/checkpoint_000049")  
+CHECKPOINT_PATH = os.path.abspath(
+    "./A-checkpoints/HPS_SimpleConfig_20exp_150iter/RunID_1/PPO_Batch_1024-lr_0.0004963481989652083_ID_8612a093_S/checkpoint_000014"
+    )  
 
 
 NR_AGENTS = 2
-ENV_CONFIG = get_busy_intersection_config(num_agents=NR_AGENTS)
+ENV_CONFIG = get_simple_multi_agent_config(num_agents=NR_AGENTS)
 ENV_CONFIG["simulation_frequency"] = 15
+ENV_CONFIG["spawn_points"] = ["3", "1"]
+ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
 
 
 multi_rl_module = MultiRLModule.from_checkpoint(
@@ -46,7 +50,9 @@ multi_rl_module = MultiRLModule.from_checkpoint(
 
 
 RENDER_MODE = "human"
-sa_env = gym.make("intersection-v1", render_mode = RENDER_MODE, config=ENV_CONFIG)
+# sa_env = gym.make("intersection-v1", render_mode = RENDER_MODE, config=ENV_CONFIG)
+# sa_env = gym.make("custom-env-v0", render_mode = RENDER_MODE, config=ENV_CONFIG)
+sa_env = gym.make("customIntersection-env-v0", render_mode=RENDER_MODE, config = ENV_CONFIG)
 ma_env = MultiAgentWrapper(sa_env)
 
 

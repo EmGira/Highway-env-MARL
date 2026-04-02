@@ -80,12 +80,12 @@ def get_simple_multi_agent_config(num_agents=2, obs_type="Kinematics"):
                     
                 },
 
-                "duration": 13,  # [s]
+                "duration": 40,  # [s]
 
-                "spawn_points": ["3", "0"],
+                "spawn_points": ["0", "1"],
 
                 "destination": "o1",
-                "multi_destinations": ["o1", "o3", "o2"],
+                "multi_destinations": None,
 
                 "controlled_vehicles": num_agents,
                 "initial_vehicle_count": 1,

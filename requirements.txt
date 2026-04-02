@@ -12,4 +12,6 @@ torch==2.9.1
 torch_geometric==2.7.0
 torchrl==0.10.1
 tqdm==4.67.1
+oputna==4.8.0
 -e ../HighwayEnv-MA-Compatible
+

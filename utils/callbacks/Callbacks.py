@@ -45,12 +45,13 @@ class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLli
 
         metrics_logger.log_value("Custom/success_rate", overall_success)
         metrics_logger.log_value("Custom/crash_incident_rate", overall_crashed)
-        
-        # Pulizia manuale della memoria GPU
-        if hasattr(self, "empty_cache"): # Se hai importato torch
+    
+
+        if hasattr(self, "empty_cache"):
             empty_cache()
     
-    empty_cache()
+
+
 
 
 #https://github.com/ray-project/ray/issues/51560#issuecomment-2758195710 thread for AdamBetas Fix
