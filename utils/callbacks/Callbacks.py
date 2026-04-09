@@ -1,6 +1,8 @@
 #https://docs.ray.io/en/latest/rllib/new-api-stack-migration-guide.html#custom-callbacks
 #https://docs.ray.io/en/latest/rllib/package_ref/doc/ray.rllib.callbacks.callbacks.RLlibCallback.html#ray.rllib.callbacks.callbacks.RLlibCallback
 
+import math
+
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.callbacks.callbacks import RLlibCallback
 from ray.rllib.env.multi_agent_episode import MultiAgentEpisode
@@ -45,12 +47,34 @@ class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLli
 
         metrics_logger.log_value("Custom/success_rate", overall_success)
         metrics_logger.log_value("Custom/crash_incident_rate", overall_crashed)
-        
-        # Pulizia manuale della memoria GPU
-        if hasattr(self, "empty_cache"): # Se hai importato torch
+    
+
+        if hasattr(self, "empty_cache"):
             empty_cache()
     
-    empty_cache()
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+
+class SafeEvaluationCallback(DefaultCallbacks):
+    def on_train_result(self, *, algorithm, result, **kwargs):
+
+        if not hasattr(algorithm, "_last_eval_score"):
+            algorithm._last_eval_score = 0.0 
+
+
+        if "evaluation" in result and "env_runners" in result["evaluation"]:
+            eval_data = result["evaluation"]["env_runners"]
+            
+   
+            if "episode_return_mean" in eval_data:
+                val = eval_data["episode_return_mean"]
+                
+          
+                if val is not None and not math.isnan(val):
+                    algorithm._last_eval_score = val
+
+        
+        result["safe_return_mean"] = algorithm._last_eval_score
+
 
 
 #https://github.com/ray-project/ray/issues/51560#issuecomment-2758195710 thread for AdamBetas Fix
