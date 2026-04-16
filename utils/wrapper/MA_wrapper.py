@@ -100,15 +100,13 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         term_dict = {}
         
         for i, agent_id in enumerate(self._agent_list):
-            
-            
             # return data only for non-terminated Agents or agents that terminated in the current step: this is required by RayRLlib
             if agent_id not in self._terminated_agents:                                               
                 obs_dict[agent_id] = obs[i].flatten()
                 rew_dict[agent_id] = rewards[i]
                 term_dict[agent_id] = dones[i]
 
-            # add agent to the terminated list
+            # add agent to the terminated list if done
             if dones[i]:
                 self._terminated_agents.add(agent_id)
             
@@ -119,10 +117,8 @@ class RLlibHighwayWrapper(MultiAgentEnv):
     
         info_dict = {agent_id: info for agent_id in obs_dict.keys()}
 
-       
         
-        # __all__ is true when all agents have completed the episode
-        
+
         term_dict["__all__"] = all(dones)
         
         if term_dict["__all__"]:

@@ -14,5 +14,7 @@ torchrl==0.10.1
 tqdm==4.67.1
 oputna==4.8.0
 optuna-dashboard==0.20.0
+plotly==6.7.0
+scikit-learn==1.8.0
 -e ../HighwayEnv-MA-Compatible
 

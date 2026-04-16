@@ -1,52 +1,3 @@
-def get_default_multi_agent_config(num_agents=2, obs_type="Kinematics"):
-
-    return {
-                "observation": { 
-                    "type": "MultiAgentObservation",
-                    "observation_config": { 
-                        "type": "Kinematics",
-                        "vehicles_count": 15,  
-                        "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
-                        "features_range": {
-                            "x": [-100, 100],
-                            "y": [-100, 100],
-                            "vx": [-20, 20],
-                            "vy": [-20, 20],
-                        },
-                        "absolute": True,
-                        "flatten": False,
-                        "observe_intentions": False,
-                    }
-                },
-
-                "action": {
-                    "type": "MultiAgentAction",
-                    "action_config": {
-                        "type": "DiscreteMetaAction",
-                        "longitudinal": True,
-                        "lateral": False,
-                        "target_speeds": [0, 4.5, 9],
-                    }
-                    
-                },
-                
-                "duration": 13,  # [s]
-                "destination": "o1",
-                "controlled_vehicles": num_agents,
-                "initial_vehicle_count": 10,
-                "spawn_probability": 0.6,
-                "screen_width": 600,
-                "screen_height": 600,
-                "centering_position": [0.5, 0.6],
-                "scaling": 5.5 * 1.3,
-                "collision_reward": -5,
-                "high_speed_reward": 1,
-                "arrived_reward": 1,
-                "reward_speed_range": [7.0, 9.0],
-                "normalize_reward": False,
-                "offroad_terminal": False,
-            }
-
 def get_simple_multi_agent_config(num_agents=2, obs_type="Kinematics"):
 
     return {
@@ -63,9 +14,9 @@ def get_simple_multi_agent_config(num_agents=2, obs_type="Kinematics"):
                             "vx": [-20, 20],
                             "vy": [-20, 20],
                         },
-                        "absolute": True,
+                        "absolute": True, #changed
                         "flatten": False,
-                        "observe_intentions": False,
+                        "observe_intentions": True, #changed
                     }
                 },
 
@@ -82,26 +33,43 @@ def get_simple_multi_agent_config(num_agents=2, obs_type="Kinematics"):
 
                 "duration": 40,  # [s]
 
-                "spawn_points": ["0", "1"],
-
+            
                 "destination": "o1",
                 "multi_destinations": None,
+                "spawn_points": None,
 
                 "controlled_vehicles": num_agents,
-                "initial_vehicle_count": 1,
-                "spawn_probability": 0.6,
-                "screen_width": 600,
-                "screen_height": 600,
+                "initial_vehicle_count": 1, #changed from 1 
+                "spawn_probability": 0.6, #changed from 0.6 to 0.
+
+                "screen_width": 1200,
+                "screen_height": 1200,
                 "centering_position": [0.5, 0.6],
                 "scaling": 5.5 * 1.3,
-                "collision_reward": -5,
+
+                "collision_reward": -50, #-50
                 "high_speed_reward": 1,
-                "arrived_reward": 1,
+                "arrived_reward": 50, #+50
                 "reward_speed_range": [7.0, 9.0],
-                "normalize_reward": False,
+                "normalize_reward": False, #try normalize 
                 "offroad_terminal": False,
 
             }
+
+def get_randomized_Simple_config(num_agents=2, obs_type="Kinematics"):
+
+    config = get_simple_multi_agent_config(num_agents=num_agents, obs_type=obs_type)
+
+    config["initial_vehicle_count"] = 4
+    config["spawn_probability"] = 0.2
+
+    config["destination"] = None
+    config["multi_destinations"] = None
+    config["spawn_points"] = None
+    config["observation"]["observation_config"]["absolute"] = False
+    config["action"]["action_config"]["target_speeds"] = [0, 3, 6] ##reduced speed, accounting for the speed limit
+    
+    return config
 
 def get_busy_intersection_config(num_agents=2, obs_type="Kinematics"):
 
@@ -137,9 +105,12 @@ def get_busy_intersection_config(num_agents=2, obs_type="Kinematics"):
                 },
 
                 "duration": 40,  # [s], longer periods so the agent has time to wait for traffic
-                "destination": "o1",
-                "controlled_vehicles": num_agents,
 
+                "destination": "o1",
+                "multi_destinations": None,
+                "spawn_points": None,
+
+                "controlled_vehicles": num_agents,
                 "initial_vehicle_count": 5, #higer traffic
                 "spawn_probability": 0.5,
                 
@@ -147,6 +118,7 @@ def get_busy_intersection_config(num_agents=2, obs_type="Kinematics"):
                 "screen_height": 1200,
                 "centering_position": [0.5, 0.6],
                 "scaling": 5.5 * 1.3,
+
                 "collision_reward": -5,
                 "high_speed_reward": 1,
                 "arrived_reward": 1,
@@ -157,63 +129,6 @@ def get_busy_intersection_config(num_agents=2, obs_type="Kinematics"):
             }
 
 
-def get_busy_intersection_Experimental_config(num_agents=2, obs_type="Kinematics"):
-
-    return {
-              
-                "observation": { 
-                    "type": "MultiAgentObservation",
-                    "observation_config": { 
-                        "type": "Kinematics",
-                        "vehicles_count": 15,  
-                        "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
-                        "features_range": {
-                            "x": [-100, 100],
-                            "y": [-100, 100],
-                            "vx": [-20, 20],
-                            "vy": [-20, 20],
-                        },
-                        "absolute": False,
-                        "flatten": False,
-                        "observe_intentions": False,
-                    }
-                },
-
-                "action": { 
-                    "type": "MultiAgentAction",
-                    "action_config": {
-                        "type": "DiscreteMetaAction",
-                        "longitudinal": True,
-                        "lateral": False,
-                        "target_speeds": [0, 4.5, 9],
-                    }
-                    
-                },
-
-                "duration": 40,  # [s], longer periods so the agent has time to wait for traffic
-                "destination": "o1",
-                "controlled_vehicles": num_agents,
-
-                "initial_vehicle_count": 5, #higer traffic
-                "spawn_probability": 0.5,
-                
-                "arrived_reward": 15,
-                "collision_reward": -20,
-                "high_speed_reward": 0.1,
-                
-                "reward_speed_range": [2.0, 9.0],
-                "normalize_reward": False,
-                "offroad_terminal": False,
-
-
-                
-                "screen_width": 600,
-                "screen_height": 600,
-                "centering_position": [0.5, 0.6],
-                "scaling": 5.5 * 1.3,
-    }
-
-def get_multi_agent_config(num_agents=2, obs_type="Kinematics"):
 
     return {
         "observation": { 

@@ -23,15 +23,16 @@ class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLli
             return
 
        
-        all_infos = episode.get_infos()  # {agent_id: [info]}
+        all_infos = episode.get_infos()  # {agent_1: [info, ...], agent_2: [info, ...]}
       
         overall_success = 0
         overall_crashed = 0
 
         for agent_id, infos in all_infos.items():
+                
                 if not infos:
                     continue
-
+                
                
                 if any(info.get("all_arrived", False) for info in infos):
                     overall_success = 1
@@ -40,10 +41,12 @@ class CrashLoggerCallback(DefaultCallbacks): #TODOO change to new API stack RLli
                     overall_crashed = 1
 
 
-                speeds = [info["speed"] for info in infos if "speed" in info]
+                agent_idx = int(agent_id.split("_")[1])
+                speeds = [info["speed"][agent_idx] for info in infos if "speed" in info]
                 if speeds:
                     avg_speed = sum(speeds) / len(speeds)
                     metrics_logger.log_value(f"Custom/average_speed_{agent_id}", avg_speed)
+
 
         metrics_logger.log_value("Custom/success_rate", overall_success)
         metrics_logger.log_value("Custom/crash_incident_rate", overall_crashed)

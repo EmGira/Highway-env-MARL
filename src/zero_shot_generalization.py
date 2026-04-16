@@ -1,8 +1,14 @@
+import sys
+import os
+parent_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, parent_folder)
+
+
 import ray
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-import os
+
 from configs.intersection.IntersectionConfigs import get_busy_intersection_config, get_simple_multi_agent_config
 
 ray.init(ignore_reinit_error=True)
@@ -10,14 +16,17 @@ ray.init(ignore_reinit_error=True)
 
 def compute_actions(multi_rl_module, obs):
 
+    policy_module = multi_rl_module["shared_policy"]
+
     with torch.no_grad():
         agents_actions = {}
         for agent_id, agent_obs in obs.items():
+       
             ao = torch.from_numpy(agent_obs).float().unsqueeze(0)
-            output = multi_rl_module[agent_id].forward_inference({"obs": ao})
+            output = policy_module.forward_inference({"obs": ao})
             agents_actions[agent_id] = torch.argmax(output["action_dist_inputs"], dim=1).item()
-    
-    return agents_actions  
+
+    return agents_actions
 
 
 @ray.remote(num_cpus=1)
@@ -94,41 +103,41 @@ def run_distributed_evaluation(policy_name, checkpoint_path, env_config, total_e
     
     return aggregated_history, mean_reward, std_reward
 
+
 NR_AGENTS = 2
 
-ENV_CONFIG_A = get_busy_intersection_config(num_agents=NR_AGENTS)
-ENV_CONFIG_A["spawn_points"] = ["0", "1"] 
-ENV_CONFIG_A["multi_destinations"] = ["o1", "o0"] 
+ENV_CONFIG_A = get_simple_multi_agent_config(num_agents=NR_AGENTS)
+Name_A = "POLICY B on CONFIG B"
+ENV_CONFIG_A["spawn_points"] = ["3", "1"] 
+ENV_CONFIG_A["multi_destinations"] = ["o0", "o3"] 
 ENV_CONFIG_A["simulation_frequency"] = 15
 
-ENV_CONFIG_B = get_busy_intersection_config(num_agents=NR_AGENTS)
-ENV_CONFIG_B["spawn_points"] = ["3", "1"] 
-ENV_CONFIG_B["multi_destinations"] = ["o0", "o3"] 
+ENV_CONFIG_B = get_simple_multi_agent_config(num_agents=NR_AGENTS)
+Name_B = "POLICY B on CONFIG A"
+ENV_CONFIG_B["spawn_points"] = ["0", "1"] 
+ENV_CONFIG_B["multi_destinations"] = ["o1", "o0"] 
 ENV_CONFIG_B["simulation_frequency"] = 15
 
 CHECKPOINT_PATH_A = os.path.abspath(
-    # "./A-checkpoints/SimpleConfig_A_Best_500iter/Run/PPO_Batch_2048-lr_1e-05_ID_e7303_00000/checkpoint_000037"
-     "./A-checkpoints/BusyConfig_A_Best_500iter/RunID_0/PPO_Batch_2048-lr_1e-05_ID_37702_00000/checkpoint_000036")  
+    "./A-checkpoints/SimpleConfig_B_500iter/Run0/PPO_Batch_2048-lr_2.375e-05_ID_d2aae_00000/checkpoint_000049"
+    )  
 CHECKPOINT_PATH_B = os.path.abspath(
-    # "./A-checkpoints/SimpleConfig_A_Best_500iter/Run/PPO_Batch_2048-lr_1e-05_ID_e7303_00000/checkpoint_000037"
-     "./A-checkpoints/BusyConfig_A_Best_500iter/RunID_0/PPO_Batch_2048-lr_1e-05_ID_37702_00000/checkpoint_000036")  
+    "./A-checkpoints/SimpleConfig_B_500iter/Run0/PPO_Batch_2048-lr_2.375e-05_ID_d2aae_00000/checkpoint_000049"
+     )  
 
 
 
-NUM_TEST_EPISODES = 200
+NUM_TEST_EPISODES = 500
 NUM_WORKERS = 5 
 
-Name_A = "POLICY A on ENV_CONFIG A"
+
 history_A, mean_A, std_A = run_distributed_evaluation(
     Name_A, CHECKPOINT_PATH_A, ENV_CONFIG_A, NUM_TEST_EPISODES, NUM_WORKERS
 )
 
-Name_B = "POLICY A on ENV_CONFIG B"
 history_B, mean_B, std_B = run_distributed_evaluation(
     Name_B, CHECKPOINT_PATH_B, ENV_CONFIG_B, NUM_TEST_EPISODES, NUM_WORKERS
 )
-
-
 
 
 
@@ -144,7 +153,7 @@ def plot_comparison(hist_A, hist_B, policies, mean_A, std_A, mean_B, std_B):
 
     fig, axs = plt.subplots(3, 1, figsize=(10, 12))
     
-    fig.suptitle('Zero-Shot Generalization: Policy A on A vs Policy A on B', fontsize=16, fontweight='bold')
+    fig.suptitle(f'Zero-Shot Generalization: {policies[0]} vs {policies[1]}', fontsize=16, fontweight='bold')
 
     axs[0].plot(episodes, hist_A["rewards"], label=policies[0], marker='o', color='green', alpha=0.7)
     axs[0].plot(episodes, hist_B["rewards"], label=policies[1], marker='s', color='red',  alpha=0.7)
@@ -153,10 +162,10 @@ def plot_comparison(hist_A, hist_B, policies, mean_A, std_A, mean_B, std_B):
     axs[0].grid(True, linestyle='--', alpha=0.5)
     
     
-    axs[0].axhline(y=mean_A, color='green', linestyle='-', label=f'Mean A ({mean_A:.1f})')
+    axs[0].axhline(y=mean_A, color='green', linestyle='-', label=f'Mean {policies[0]} ({mean_A:.1f})')
     axs[0].fill_between(episodes, mean_A - std_A, mean_A + std_A, color='green', alpha=0.2)
 
-    axs[0].axhline(y=mean_B, color='red', linestyle='-', label=f'Mean B ({mean_B:.1f})')
+    axs[0].axhline(y=mean_B, color='red', linestyle='-', label=f'Mean {policies[1]} ({mean_B:.1f})')
     axs[0].fill_between(episodes, mean_B - std_B, mean_B + std_B, color='red', alpha=0.2)
 
     axs[0].legend()
@@ -182,9 +191,6 @@ def plot_comparison(hist_A, hist_B, policies, mean_A, std_A, mean_B, std_B):
     plt.savefig("comparison_results.svg", format="svg")
     plt.show()
 
-
-Name_A = "Policy A"
-Name_B = "Policy B"
 
 plot_comparison(history_A, history_B, [Name_A, Name_B], mean_A, std_A, mean_B, std_B)
 
