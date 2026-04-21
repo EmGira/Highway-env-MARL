@@ -66,9 +66,15 @@ def get_randomized_Simple_config(num_agents=2, obs_type="Kinematics"):
     config["destination"] = None
     config["multi_destinations"] = None
     config["spawn_points"] = None
+
     config["observation"]["observation_config"]["absolute"] = False
-    config["action"]["action_config"]["target_speeds"] = [0, 3, 6] ##reduced speed, accounting for the speed limit
+    config["action"]["action_config"]["target_speeds"] = [0, 1.5, 3, 4.5, 6]
     
+    config["reward_speed_range"] = [0, 6]
+
+    config["high_speed_reward"] = 0.5
+    config["duration"] = 60
+
     return config
 
 def get_busy_intersection_config(num_agents=2, obs_type="Kinematics"):

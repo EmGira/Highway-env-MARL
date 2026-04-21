@@ -22,8 +22,6 @@ from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
 from optuna.storages import RDBStorage
-from optuna import load_study
-from optuna.visualization import plot_optimization_history, plot_parallel_coordinate, plot_param_importances
 
 from pathlib import Path
 import datetime
@@ -54,11 +52,11 @@ nr_of_subdirectories, checkpoints_dir, today = initialize()
 
 
 #CONFIG
-NR_AGENTS = 4
+NR_AGENTS = 2
 ENV_CONFIG = get_randomized_Simple_config(NR_AGENTS)
 
-# ENV_CONFIG["spawn_points"] = ["3", "1"]
-# ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+ENV_CONFIG["spawn_points"] = ["3", "1"]
+ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
 
 # ENV_CONFIG["spawn_points"] = ["0", "1"]
 # ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
@@ -81,9 +79,11 @@ config = (
     )
     .evaluation(
         evaluation_num_env_runners=0,
-        evaluation_interval=5,
+        evaluation_interval=10,
         evaluation_duration=20,
         evaluation_duration_unit="episodes",
+        
+        
 
     )
     .training( 
@@ -94,8 +94,13 @@ config = (
         
       
         entropy_coeff = 0.0028,
-        num_epochs = 10,
-        lr = 2.375e-05,
+        num_epochs = 8,
+        lr = [
+            [0, 5e-5],     
+            [500000, 1e-5], 
+            [1000000, 1e-6]    
+        ],
+
         gamma = 0.995,
 
 
@@ -122,10 +127,10 @@ config = (
 
 run_config = RunConfig(
 
-    name=f"RunID_{nr_of_subdirectories}",
+    name=f"PPO_{nr_of_subdirectories}",
     storage_path=os.path.abspath(checkpoints_dir),
     
-    stop={"training_iteration": 500},
+    stop={"training_iteration": 1000},
 
 
     failure_config=FailureConfig(
@@ -160,41 +165,50 @@ scheduler = ASHAScheduler(
 
 
 def custom_trial_dirname(trial):
+    
+    lr_config = trial.config.get("lr")
 
-    batch_size = trial.config.get("_train_batch_size_per_learner")
-    lr = trial.config.get("lr")
-    return f"PPO_Batch_{batch_size}-lr_{lr}_ID_{trial.trial_id}"
+    if not isinstance(lr_config, list):
+        lr_str = f"{lr_config:.7f}"
+    else:
+        lr_str = "scheduled"
+        
+    return f"lr_{lr_str}_ID_{trial.trial_id}"
+    
+
+
+
 def custom_trial_name(trial):
     return f"Experiment_{trial.trial_id}"
 
-tuner = tune.Tuner(
-    "PPO",
-    tune_config=tune.TuneConfig(
+# tuner = tune.Tuner(
+#     "PPO",
+#     tune_config=tune.TuneConfig(
 
-        metric=run_config.checkpoint_config.checkpoint_score_attribute, 
-        mode=run_config.checkpoint_config.checkpoint_score_order,
+#         metric=run_config.checkpoint_config.checkpoint_score_attribute, 
+#         mode=run_config.checkpoint_config.checkpoint_score_order,
 
-        num_samples=1,
+#         num_samples=1,
 
-        #search_alg=algo,
-        #scheduler=scheduler, 
+#         #search_alg=algo,
+#         #scheduler=scheduler, 
 
-        trial_dirname_creator=custom_trial_dirname,
-        trial_name_creator=custom_trial_name
-    ),            
-    param_space=config,         
-    run_config=run_config,    
-)
-
-
-# tuner = tune.Tuner.restore(   
-#     path=os.path.abspath("./A-checkpoints/2026-04-14/RunID_1"), 
-#     trainable="PPO",
-#     resume_unfinished=True,
-#     resume_errored = True,
-#     param_space=config, 
-
+#         trial_dirname_creator=custom_trial_dirname,
+#         trial_name_creator=custom_trial_name
+#     ),            
+#     param_space=config,         
+#     run_config=run_config,    
 # )
+
+
+tuner = tune.Tuner.restore(   
+    path=os.path.abspath("./A-checkpoints/2026-04-20/PPO_5"), 
+    trainable="PPO",
+    resume_unfinished=True,
+    resume_errored = True,
+    param_space=config, 
+
+)
 
 
 #TRAIN

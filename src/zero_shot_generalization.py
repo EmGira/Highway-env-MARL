@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-from configs.intersection.IntersectionConfigs import get_busy_intersection_config, get_simple_multi_agent_config
+from configs.intersection.IntersectionConfigs import get_busy_intersection_config, get_simple_multi_agent_config, get_randomized_Simple_config
 
 ray.init(ignore_reinit_error=True)
 
@@ -106,23 +106,23 @@ def run_distributed_evaluation(policy_name, checkpoint_path, env_config, total_e
 
 NR_AGENTS = 2
 
-ENV_CONFIG_A = get_simple_multi_agent_config(num_agents=NR_AGENTS)
+ENV_CONFIG_A = get_randomized_Simple_config(num_agents=NR_AGENTS)
 Name_A = "POLICY B on CONFIG B"
 ENV_CONFIG_A["spawn_points"] = ["3", "1"] 
 ENV_CONFIG_A["multi_destinations"] = ["o0", "o3"] 
 ENV_CONFIG_A["simulation_frequency"] = 15
 
-ENV_CONFIG_B = get_simple_multi_agent_config(num_agents=NR_AGENTS)
-Name_B = "POLICY B on CONFIG A"
-ENV_CONFIG_B["spawn_points"] = ["0", "1"] 
-ENV_CONFIG_B["multi_destinations"] = ["o1", "o0"] 
+ENV_CONFIG_B = get_randomized_Simple_config(num_agents=NR_AGENTS)
+Name_B = "POLICY B on CONFIG C"
+ENV_CONFIG_B["spawn_points"] = ["2", "1"] 
+ENV_CONFIG_B["multi_destinations"] = ["o3", "o3"] 
 ENV_CONFIG_B["simulation_frequency"] = 15
 
 CHECKPOINT_PATH_A = os.path.abspath(
-    "./A-checkpoints/SimpleConfig_B_500iter/Run0/PPO_Batch_2048-lr_2.375e-05_ID_d2aae_00000/checkpoint_000049"
+    "./A-checkpoints/2026-04-16/PPO_1/lr_0.0000238_ID_4a57f_00000/checkpoint_000046"
     )  
 CHECKPOINT_PATH_B = os.path.abspath(
-    "./A-checkpoints/SimpleConfig_B_500iter/Run0/PPO_Batch_2048-lr_2.375e-05_ID_d2aae_00000/checkpoint_000049"
+    "./A-checkpoints/2026-04-16/PPO_1/lr_0.0000238_ID_4a57f_00000/checkpoint_000046"
      )  
 
 

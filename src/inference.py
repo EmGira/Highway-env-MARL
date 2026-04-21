@@ -18,7 +18,7 @@ sys.path.insert(0, parent_folder)
 
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 
-from configs.intersection.IntersectionConfigs import get_busy_intersection_config, get_simple_multi_agent_config
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_randomized_Simple_config
 
 
 def compute_actions(multi_rl_module, obs):
@@ -38,22 +38,22 @@ def compute_actions(multi_rl_module, obs):
     return agents_actions
 
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/SimpleConfig_B_500iter/Run0/PPO_Batch_2048-lr_2.375e-05_ID_d2aae_00000/checkpoint_000038"
+    "./A-checkpoints/2026-04-20/PPO_5/lr_scheduled_ID_2e1d2_00000/checkpoint_000042"
     )  
 
 
 NR_AGENTS = 2
-ENV_CONFIG = get_simple_multi_agent_config(num_agents=NR_AGENTS)
-ENV_CONFIG["simulation_frequency"] = 15
+ENV_CONFIG = get_randomized_Simple_config(num_agents=NR_AGENTS)
+ENV_CONFIG["simulation_frequency"] = 30
 
-# ENV_CONFIG["spawn_points"] = ["0", "1"]
-# ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
+ENV_CONFIG["spawn_points"] = ["0", "1"]
+ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
 
 # ENV_CONFIG["spawn_points"] = ["3", "1"]
 # ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
 
-ENV_CONFIG["spawn_points"] = ["2", "1"] 
-ENV_CONFIG["multi_destinations"] = ["o3", "o3"] 
+# ENV_CONFIG["spawn_points"] = ["2", "1"] 
+# ENV_CONFIG["multi_destinations"] = ["o3", "o3"] 
 
 
 multi_rl_module = MultiRLModule.from_checkpoint(
