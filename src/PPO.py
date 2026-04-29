@@ -9,7 +9,7 @@ sys.path.insert(0, parent_folder)
 
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 from utils.callbacks.Callbacks import CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_randomized_Simple_config
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
 import highway_env
 
 import ray
@@ -53,7 +53,7 @@ nr_of_subdirectories, checkpoints_dir, today = initialize()
 
 #CONFIG
 NR_AGENTS = 2
-ENV_CONFIG = get_randomized_Simple_config(NR_AGENTS)
+ENV_CONFIG = get_improved_Simple_config(NR_AGENTS)
 
 ENV_CONFIG["spawn_points"] = ["3", "1"]
 ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
@@ -62,7 +62,6 @@ ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
 # ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
 
 
-# tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "intersection-v1")) #
 tune.register_env("CustomIntersection-env-v0", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "customIntersection-env-v0")) #
 
 config = (
@@ -80,7 +79,7 @@ config = (
     .evaluation(
         evaluation_num_env_runners=0,
         evaluation_interval=10,
-        evaluation_duration=20,
+        evaluation_duration=30,
         evaluation_duration_unit="episodes",
         
         
@@ -94,14 +93,14 @@ config = (
         
       
         entropy_coeff = 0.0028,
-        num_epochs = 8,
+        num_epochs = 8, #15
         lr = [
             [0, 5e-5],     
             [500000, 1e-5], 
             [1000000, 1e-6]    
         ],
 
-        gamma = 0.995,
+        gamma = 0.995, #0.99
 
 
         use_critic = True,           
@@ -110,7 +109,14 @@ config = (
         lambda_ = 0.95,
         vf_loss_coeff = 0.5,    
 
-        kl_target = 0.01,       
+
+        kl_target = 0.01,     
+
+        #policy and value function dont share weights
+        model={
+        "vf_share_layers": False,
+        }  
+        
     )
     .learners(
         num_learners=1,
@@ -181,34 +187,34 @@ def custom_trial_dirname(trial):
 def custom_trial_name(trial):
     return f"Experiment_{trial.trial_id}"
 
-# tuner = tune.Tuner(
-#     "PPO",
-#     tune_config=tune.TuneConfig(
+tuner = tune.Tuner(
+    "PPO",
+    tune_config=tune.TuneConfig(
 
-#         metric=run_config.checkpoint_config.checkpoint_score_attribute, 
-#         mode=run_config.checkpoint_config.checkpoint_score_order,
+        metric=run_config.checkpoint_config.checkpoint_score_attribute, 
+        mode=run_config.checkpoint_config.checkpoint_score_order,
 
-#         num_samples=1,
+        num_samples=1,
 
-#         #search_alg=algo,
-#         #scheduler=scheduler, 
+        #search_alg=algo,
+        #scheduler=scheduler, 
 
-#         trial_dirname_creator=custom_trial_dirname,
-#         trial_name_creator=custom_trial_name
-#     ),            
-#     param_space=config,         
-#     run_config=run_config,    
-# )
-
-
-tuner = tune.Tuner.restore(   
-    path=os.path.abspath("./A-checkpoints/2026-04-20/PPO_5"), 
-    trainable="PPO",
-    resume_unfinished=True,
-    resume_errored = True,
-    param_space=config, 
-
+        trial_dirname_creator=custom_trial_dirname,
+        trial_name_creator=custom_trial_name
+    ),            
+    param_space=config,         
+    run_config=run_config,    
 )
+
+
+# tuner = tune.Tuner.restore(   
+#     path=os.path.abspath("./A-checkpoints/2026-04-27/PPO_0"), 
+#     trainable="PPO",
+#     resume_unfinished=True,
+#     resume_errored = True,
+#     param_space=config, 
+
+# )
 
 
 #TRAIN

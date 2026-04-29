@@ -18,7 +18,7 @@ sys.path.insert(0, parent_folder)
 
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_randomized_Simple_config
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
 
 
 def compute_actions(multi_rl_module, obs):
@@ -33,24 +33,53 @@ def compute_actions(multi_rl_module, obs):
             output = policy_module.forward_inference({"obs": ao})
             agents_actions[agent_id] = torch.argmax(output["action_dist_inputs"], dim=1).item()
 
-            
-    
     return agents_actions
 
+
+def compute_continous_actions(multi_rl_module, obs, env_agent_ids):
+    policy_module = multi_rl_module["shared_policy"]
+
+    with torch.no_grad():
+        agents_actions = {}
+        
+        for agent_id in env_agent_ids:
+            
+            if agent_id in obs:
+   
+                agent_obs = obs[agent_id]
+                ao = torch.from_numpy(agent_obs).float().unsqueeze(0)
+                output = policy_module.forward_inference({"obs": ao})
+                
+                action_dist_params = output["action_dist_inputs"][0].cpu().numpy()
+                
+                greedy_action = np.clip(
+                    action_dist_params[0:1], 
+                    a_min=-1.0,
+                    a_max=1.0,
+                )
+                agents_actions[agent_id] = greedy_action
+                
+            else:
+                agents_actions[agent_id] = np.array([0.0], dtype=np.float32)
+                
+    return agents_actions
+
+
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/2026-04-20/PPO_5/lr_scheduled_ID_2e1d2_00000/checkpoint_000042"
+    "./A-checkpoints/run7/PPO_5/lr_scheduled_ID_2e1d2_00000/checkpoint_000052"
     )  
 
 
 NR_AGENTS = 2
-ENV_CONFIG = get_randomized_Simple_config(num_agents=NR_AGENTS)
+ENV_CONFIG = get_improved_Simple_config(num_agents=NR_AGENTS)
 ENV_CONFIG["simulation_frequency"] = 30
 
-ENV_CONFIG["spawn_points"] = ["0", "1"]
-ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
 
-# ENV_CONFIG["spawn_points"] = ["3", "1"]
-# ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+ENV_CONFIG["spawn_points"] = ["3", "1"]
+ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+
+# ENV_CONFIG["spawn_points"] = ["0", "1"]
+# ENV_CONFIG["multi_destinations"] = ["o2", "o3"]
 
 # ENV_CONFIG["spawn_points"] = ["2", "1"] 
 # ENV_CONFIG["multi_destinations"] = ["o3", "o3"] 
@@ -82,6 +111,8 @@ for ep in range(NUM_TEST_EPISODES):
 
     obs, info = ma_env.reset()
 
+    all_agent_ids = list(obs.keys())
+
     done = {"__all__": False}
     truncated = {"__all__": False}
 
@@ -90,16 +121,17 @@ for ep in range(NUM_TEST_EPISODES):
     while not (done["__all__"] or truncated["__all__"]):
        
         agents_actions = compute_actions(multi_rl_module, obs)
-
+        print("DEBUG:", agents_actions)
        
         obs, reward, done, truncated, info = ma_env.step(agents_actions)
+        
         ep_reward += sum(reward.values())
 
         if RENDER_MODE != None:
             ma_env.render()
 
-        # print("@@info:")
-        # pprint.pprint(info)
+        print("@@info:")
+        pprint.pprint(info)
 
    
     last_info = list(info.values())[0] if info else {}
