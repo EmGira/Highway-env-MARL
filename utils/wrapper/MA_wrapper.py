@@ -77,7 +77,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             if agent_id in action_dict:
                 actions.append(action_dict[agent_id])
             else:
-                actions.append(0) #default action when terminated
+                actions.append(4) #default action when terminated
         
         actions = tuple(actions)
         
@@ -107,11 +107,11 @@ class RLlibHighwayWrapper(MultiAgentEnv):
                 info_dict[agent_id] = info[i] if is_info_iterable else info
 
            
-            agent_done = dones[i]
-            agent_trunc = truncated[i] if is_trunc_iterable else truncated
-            
-            if agent_done or agent_trunc:
-                self._terminated_agents.add(agent_id)
+                agent_done = dones[i]
+                agent_trunc = truncated[i] if is_trunc_iterable else truncated
+                
+                if agent_done or agent_trunc:
+                    self._terminated_agents.add(agent_id)
         
         #episoded end only when all agents are terminated
         is_all_done = len(self._terminated_agents) == len(self._agent_list)
