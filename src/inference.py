@@ -1,50 +1,89 @@
 import gymnasium as gym
-from ray.rllib.algorithms.algorithm import Algorithm
-from ray.rllib.core.rl_module import RLModule   
-from ray.rllib.core.rl_module import MultiRLModule 
-
-from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
-from utils.callbacks.Callbacks import CrashLoggerCallback
-
 import highway_env
-from highway_env.envs.common.abstract import MultiAgentWrapper
 
-from configs.intersection.IntersectionConfigs import get_multi_agent_config, get_default_multi_agent_config, get_busy_intersection_config, get_simple_multi_agent_config, get_busy_intersection_Experimental_config
-from configs.CustomMerge.customMergeConfigs import get_default_custom_env_config
 
 import pprint 
-import os
 import torch
 import numpy as np
-from pathlib import Path
 
 import ray
 from ray import tune
+from ray.rllib.core.rl_module import MultiRLModule 
+
+from pathlib import Path
+import sys
+import os
+parent_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, parent_folder)
+
+from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
+
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
+
 
 def compute_actions(multi_rl_module, obs):
+
+    policy_module = multi_rl_module["shared_policy"]
 
     with torch.no_grad():
         agents_actions = {}
         for agent_id, agent_obs in obs.items():
+       
             ao = torch.from_numpy(agent_obs).float().unsqueeze(0)
-            output = multi_rl_module[agent_id].forward_inference({"obs": ao})
+            output = policy_module.forward_inference({"obs": ao})
             agents_actions[agent_id] = torch.argmax(output["action_dist_inputs"], dim=1).item()
-    
-    return agents_actions  
+
+    return agents_actions
+
+
+def compute_continous_actions(multi_rl_module, obs, env_agent_ids):
+    policy_module = multi_rl_module["shared_policy"]
+
+    with torch.no_grad():
+        agents_actions = {}
+        
+        for agent_id in env_agent_ids:
+            
+            if agent_id in obs:
+   
+                agent_obs = obs[agent_id]
+                ao = torch.from_numpy(agent_obs).float().unsqueeze(0)
+                output = policy_module.forward_inference({"obs": ao})
+                
+                action_dist_params = output["action_dist_inputs"][0].cpu().numpy()
+                
+                greedy_action = np.clip(
+                    action_dist_params[0:1], 
+                    a_min=-1.0,
+                    a_max=1.0,
+                )
+                agents_actions[agent_id] = greedy_action
+                
+            else:
+                agents_actions[agent_id] = np.array([0.0], dtype=np.float32)
+                
+    return agents_actions
 
 
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/BusyConfig_A_Best_500iter/RunID_0/PPO_Batch_2048-lr_1e-05_ID_37702_00000/checkpoint_000043"
+    "./A-checkpoints/run7/PPO_5/lr_scheduled_ID_2e1d2_00000/checkpoint_000052"
     )  
 
 
 NR_AGENTS = 2
-ENV_CONFIG = get_busy_intersection_config(num_agents=NR_AGENTS)
-ENV_CONFIG["simulation_frequency"] = 15
-ENV_CONFIG["spawn_points"] = ["0", "1"]
-ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
-# ENV_CONFIG["spawn_points"] = ["3", "1"]
-# ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+ENV_CONFIG = get_improved_Simple_config(num_agents=NR_AGENTS)
+ENV_CONFIG["simulation_frequency"] = 30
+
+
+ENV_CONFIG["spawn_points"] = ["3", "1"]
+ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+
+# ENV_CONFIG["spawn_points"] = ["0", "1"]
+# ENV_CONFIG["multi_destinations"] = ["o2", "o3"]
+
+# ENV_CONFIG["spawn_points"] = ["2", "1"] 
+# ENV_CONFIG["multi_destinations"] = ["o3", "o3"] 
+
 
 multi_rl_module = MultiRLModule.from_checkpoint(
     Path(CHECKPOINT_PATH)
@@ -72,6 +111,8 @@ for ep in range(NUM_TEST_EPISODES):
 
     obs, info = ma_env.reset()
 
+    all_agent_ids = list(obs.keys())
+
     done = {"__all__": False}
     truncated = {"__all__": False}
 
@@ -80,17 +121,21 @@ for ep in range(NUM_TEST_EPISODES):
     while not (done["__all__"] or truncated["__all__"]):
        
         agents_actions = compute_actions(multi_rl_module, obs)
-
+        print("DEBUG:", agents_actions)
        
         obs, reward, done, truncated, info = ma_env.step(agents_actions)
+        
         ep_reward += sum(reward.values())
 
         if RENDER_MODE != None:
             ma_env.render()
 
+        print("@@info:")
+        pprint.pprint(info)
+
    
     last_info = list(info.values())[0] if info else {}
-
+    
     is_crashed = last_info.get('crashed', False)
   
     is_success = last_info.get("all_arrived", False)
@@ -99,6 +144,7 @@ for ep in range(NUM_TEST_EPISODES):
         success_count += 1
     if is_crashed:
         crash_count += 1
+
     
     total_rewards.append(ep_reward)
     print(f"Ep {ep+1}: {'SUCCESS' if is_success else ('CRASHED' if is_crashed else 'TRUNCATED')} | Reward: {ep_reward:.2f}")

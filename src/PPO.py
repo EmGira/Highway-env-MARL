@@ -2,29 +2,27 @@
 #https://docs.ray.io/en/latest/tune/api/doc/ray.tune.RunConfig.html#ray.tune.RunConfig
 #https://github.com/ray-project/ray/issues/51560#issuecomment-2758195710 thread for AdamBetas Fix
 
-
+import sys
+import os
+parent_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, parent_folder)
 
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 from utils.callbacks.Callbacks import CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback
-from configs.intersection.IntersectionConfigs import get_busy_intersection_Experimental_config, get_simple_multi_agent_config, get_busy_intersection_config
-from configs.CustomMerge.customMergeConfigs import get_default_custom_env_config
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
 import highway_env
 
 import ray
 from ray import shutdown
 from ray import tune
-from ray.tune import CLIReporter, RunConfig, CheckpointConfig, FailureConfig
+from ray.tune import RunConfig, CheckpointConfig, FailureConfig
 
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
-from ray.tune.search import optuna
 from optuna.storages import RDBStorage
-from optuna import load_study 
 
-
-import os
 from pathlib import Path
 import datetime
 
@@ -50,28 +48,20 @@ def initialize():
 def my_policy_mapping_fn(agent_id, episode, **kwargs):
     return agent_id
 
-def calculate_minibatch_size(config):
-
-    batch_size = config.get("train_batch_size_per_learner", config.get("_train_batch_size_per_learner"))
-    if batch_size == 1024:
-        return 64
-    return 128
-
 nr_of_subdirectories, checkpoints_dir, today = initialize()
 
 
 #CONFIG
 NR_AGENTS = 2
-ENV_CONFIG = get_busy_intersection_config(NR_AGENTS)
+ENV_CONFIG = get_improved_Simple_config(NR_AGENTS)
 
-# ENV_CONFIG["spawn_points"] = ["3", "1"]
-# ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+ENV_CONFIG["spawn_points"] = ["3", "1"]
+ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
 
-ENV_CONFIG["spawn_points"] = ["0", "1"]
-ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
+# ENV_CONFIG["spawn_points"] = ["0", "1"]
+# ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
 
 
-# tune.register_env("intersection-v1_multiagent", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "intersection-v1")) #
 tune.register_env("CustomIntersection-env-v0", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "customIntersection-env-v0")) #
 
 config = (
@@ -88,9 +78,12 @@ config = (
     )
     .evaluation(
         evaluation_num_env_runners=0,
-        evaluation_interval=5,
-        evaluation_duration=20,
+        evaluation_interval=10,
+        evaluation_duration=30,
         evaluation_duration_unit="episodes",
+        
+        
+
     )
     .training( 
         
@@ -99,29 +92,40 @@ config = (
         clip_param=0.1,                 
         
       
-        num_epochs = 5,  
-        lr = 1e-5,  
-        entropy_coeff = 0.0086, 
-        
-        
+        entropy_coeff = 0.0028,
+        num_epochs = 8, #15
+        lr = [
+            [0, 5e-5],     
+            [500000, 1e-5], 
+            [1000000, 1e-6]    
+        ],
+
+        gamma = 0.995, #0.99
+
+
         use_critic = True,           
-        use_gae = True,        
-        
-        
-        gamma = 0.99,
-        
+        use_gae = True,               
+
         lambda_ = 0.95,
+        vf_loss_coeff = 0.5,    
+
+
+        kl_target = 0.01,     
+
+        #policy and value function dont share weights
+        model={
+        "vf_share_layers": False,
+        }  
         
-       
-        vf_loss_coeff = 0.5           
     )
     .learners(
         num_learners=1,
         num_gpus_per_learner=1
     )
     .multi_agent(
-        policies={"agent_0", "agent_1"}, 
-        policy_mapping_fn= my_policy_mapping_fn, 
+
+        policies={"shared_policy"}, 
+        policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy",
     )
     .callbacks([CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback] )
 
@@ -129,10 +133,10 @@ config = (
 
 run_config = RunConfig(
 
-    name=f"RunID_{nr_of_subdirectories}",
+    name=f"PPO_{nr_of_subdirectories}",
     storage_path=os.path.abspath(checkpoints_dir),
     
-    stop={"training_iteration": 500},
+    stop={"training_iteration": 1000},
 
 
     failure_config=FailureConfig(
@@ -140,7 +144,7 @@ run_config = RunConfig(
     ),
    
     checkpoint_config=CheckpointConfig(
-        num_to_keep = 3,  # keep the 3 most recent (or best) checkpoints from training
+        num_to_keep = 3,
         checkpoint_score_attribute = "safe_return_mean",
         checkpoint_score_order = 'max',
         checkpoint_frequency=10, 
@@ -158,19 +162,28 @@ algo = OptunaSearch(
 
 )
 
-# scheduler = ASHAScheduler(    
-#     max_t=run_config.stop["training_iteration"],                    
-#     grace_period=50, # tries at least 50 iters before stopping
-#     reduction_factor=2
-# )
+scheduler = ASHAScheduler(    
+    max_t=run_config.stop["training_iteration"],                    
+    grace_period=30, 
+    reduction_factor=2
+)
 
 
 
 def custom_trial_dirname(trial):
+    
+    lr_config = trial.config.get("lr")
 
-    batch_size = trial.config.get("_train_batch_size_per_learner")
-    lr = trial.config.get("lr")
-    return f"PPO_Batch_{batch_size}-lr_{lr}_ID_{trial.trial_id}"
+    if not isinstance(lr_config, list):
+        lr_str = f"{lr_config:.7f}"
+    else:
+        lr_str = "scheduled"
+        
+    return f"lr_{lr_str}_ID_{trial.trial_id}"
+    
+
+
+
 def custom_trial_name(trial):
     return f"Experiment_{trial.trial_id}"
 
@@ -183,8 +196,8 @@ tuner = tune.Tuner(
 
         num_samples=1,
 
-        # search_alg=algo,
-        #scheduler=scheduler, TODOO scheduler disabled for now as it is not behaving as expected
+        #search_alg=algo,
+        #scheduler=scheduler, 
 
         trial_dirname_creator=custom_trial_dirname,
         trial_name_creator=custom_trial_name
@@ -195,7 +208,7 @@ tuner = tune.Tuner(
 
 
 # tuner = tune.Tuner.restore(   
-#     path=os.path.abspath("./A-checkpoints/2026-04-04/RunID_1"), 
+#     path=os.path.abspath("./A-checkpoints/2026-04-27/PPO_0"), 
 #     trainable="PPO",
 #     resume_unfinished=True,
 #     resume_errored = True,
@@ -221,25 +234,9 @@ print(f"\t Results store here ==> {best_result.path}")
 print(f"\t For TensoBoard, execute ==> tensorboard --logdir={best_result.path}")
 
 
-# print("\n@@@ Saving Optuna Graphs")
+shutdown()
 
-# study = load_study(
-#     study_name=study_name, 
-#     storage="sqlite:///optuna_highway_results.db"
-# )
 
-# fig_history = optuna.visualization.plot_optimization_history(study)
-# fig_parallel = optuna.visualization.plot_parallel_coordinate(study)
-# fig_importance = optuna.visualization.plot_param_importances(study)
-
-# # 3. Salvali in formato HTML interattivo
-# fig_history.write_html("optuna_history.html")
-# fig_parallel.write_html("optuna_parallel.html")
-# fig_importance.write_html("optuna_importance.html")
-
-# print("Grafici salvati con successo!")
-
-# shutdown()
 
 
 

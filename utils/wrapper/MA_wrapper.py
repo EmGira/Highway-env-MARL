@@ -7,11 +7,10 @@ from highway_env.envs.common.abstract import MultiAgentWrapper
 import numpy as np
 
 class RLlibHighwayWrapper(MultiAgentEnv):
-    def __init__(self, config, env_id, render_mode = None): #TODOO.1 add envID as parameter
+    def __init__(self, config, env_id, render_mode = None): 
         super().__init__()
         sa_env = gym.make(env_id, render_mode=render_mode, config=config) #"intersection-v1"
         self.env = MultiAgentWrapper(sa_env)
-
         
         self._agent_list = [f"agent_{i}" for i in range(config["controlled_vehicles"])]
         self._agent_ids = set(self._agent_list)
@@ -64,71 +63,65 @@ class RLlibHighwayWrapper(MultiAgentEnv):
 
 
     def step(self, action_dict):
-        # Tracking agents that terminated: 
-        # we need to do this because RLlib requires that agents that have terminated dont return their reward
+        # Tracking agents that terminated
         if not hasattr(self, '_terminated_agents'):
             self._terminated_agents = set()
         
-        
-        
-        
+    
         if not action_dict:
             raise ValueError("action_dict is empty or None!")
-        
 
-        # build tuple of the actions of every agent (for those who terminated, default to 0)
+        # build tuple of the actions of every agent
         actions = []
         for agent_id in self._agent_list:
-
             if agent_id in action_dict:
                 actions.append(action_dict[agent_id])
-
-            elif agent_id in self._terminated_agents:
-                actions.append(0)
-
             else:
-                print(f"  WARNING: {agent_id} not in action_dict and not terminated!")
-                actions.append(0)
+                actions.append(0) #default action when terminated
         
         actions = tuple(actions)
         
-        #execute actions in the enviroment and compute the results in the format required by RayRLlib
+        
         obs, rewards, dones, truncated, info = self.env.step(actions)
     
         obs_dict = {}
         rew_dict = {}
         term_dict = {}
+        trunc_dict = {}
+        info_dict = {}
+        
+       
+        is_trunc_iterable = isinstance(truncated, (list, tuple, np.ndarray))
+        is_info_iterable = isinstance(info, (list, tuple, np.ndarray))
         
         for i, agent_id in enumerate(self._agent_list):
-            
-            
-            # return data only for non-terminated Agents or agents that terminated in the current step: this is required by RayRLlib
-            if agent_id not in self._terminated_agents:                                               
+            if agent_id not in self._terminated_agents:                                              
                 obs_dict[agent_id] = obs[i].flatten()
                 rew_dict[agent_id] = rewards[i]
                 term_dict[agent_id] = dones[i]
+                
+                
+                agent_truncated = truncated[i] if is_trunc_iterable else truncated
+                trunc_dict[agent_id] = agent_truncated
+                
+                info_dict[agent_id] = info[i] if is_info_iterable else info
 
-            # add agent to the terminated list
-            if dones[i]:
-                self._terminated_agents.add(agent_id)
+           
+            agent_done = dones[i]
+            agent_trunc = truncated[i] if is_trunc_iterable else truncated
             
+            if agent_done or agent_trunc:
+                self._terminated_agents.add(agent_id)
         
-        # Truncated and Info: returned only for active agents
-        trunc_dict = {agent_id: truncated for agent_id in obs_dict.keys()}
-        trunc_dict["__all__"] = truncated
-    
-        info_dict = {agent_id: info for agent_id in obs_dict.keys()}
-
-       
+        #episoded end only when all agents are terminated
+        is_all_done = len(self._terminated_agents) == len(self._agent_list)
         
-        # __all__ is true when all agents have completed the episode
+        term_dict["__all__"] = is_all_done
+        trunc_dict["__all__"] = False 
         
-        term_dict["__all__"] = all(dones)
-        
-        if term_dict["__all__"]:
+        if is_all_done:
             self._terminated_agents = set()
             
- 
         return obs_dict, rew_dict, term_dict, trunc_dict, info_dict
 
 
