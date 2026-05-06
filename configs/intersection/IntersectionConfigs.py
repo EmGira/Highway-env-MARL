@@ -111,7 +111,7 @@ def get_improved_Simple_config(num_agents=2, obs_type="Kinematics"):
         "tailgating_penalty": 0,   #-2
         "stopped_penalty": -0.05,
 
-        "normalize_reward": False, 
+        "normalize_reward": True, 
         
         # Simulation specifics
         "initial_simulation_steps": 7, 

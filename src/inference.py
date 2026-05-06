@@ -66,7 +66,7 @@ def compute_continous_actions(multi_rl_module, obs, env_agent_ids):
 
 
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/run10/PPO_0/lr_scheduled_ID_12834_00000/checkpoint_000007"
+    "./A-checkpoints/run11/PPO_0/lr_scheduled_ID_8d147_00000/checkpoint_000046"
     )  
 
 
@@ -75,8 +75,8 @@ ENV_CONFIG = get_improved_Simple_config(num_agents=NR_AGENTS)
 ENV_CONFIG["simulation_frequency"] = 15
 
 
-ENV_CONFIG["spawn_points"] = ["2", "0"]
-ENV_CONFIG["multi_destinations"] = ["o3", "o2"]
+ENV_CONFIG["spawn_points"] = ["0", "2"]
+ENV_CONFIG["multi_destinations"] = ["o2", "o3"]
 
 #ENV_CONFIG["spawn_points"] = ["3", "1"]
 #ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
@@ -129,7 +129,8 @@ for ep in range(NUM_TEST_EPISODES):
       
        
         obs, reward, done, truncated, info = ma_env.step(agents_actions)
-        
+        print(reward)
+        print(obs)
         ep_reward += sum(reward.values())
 
         if RENDER_MODE != None:
