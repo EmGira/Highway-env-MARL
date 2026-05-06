@@ -80,34 +80,30 @@ config = (
         evaluation_num_env_runners=0,
         evaluation_interval=10,
         evaluation_duration=30,
-        evaluation_duration_unit="episodes",
-        
-        
+        evaluation_duration_unit="episodes", 
 
     )
     .training( 
         
-        train_batch_size_per_learner=2048,
-        minibatch_size=128,          
+        train_batch_size_per_learner=4096,
+        minibatch_size=256,          
         clip_param=0.1,                 
         
       
         entropy_coeff = 0.0028,
-        num_epochs = 8, #15
-        lr = [
-            [0, 5e-5],     
-            [500000, 1e-5], 
-            [1000000, 1e-6]    
-        ],
+        num_epochs = 4,
+        lr =
+            [[0, 3e-4], [2000000, 1e-5]]
+        ,
 
-        gamma = 0.995, #0.99
+        gamma = 0.95, #before: 0.995
 
 
         use_critic = True,           
         use_gae = True,               
 
         lambda_ = 0.95,
-        vf_loss_coeff = 0.5,    
+        vf_loss_coeff = 1,    # 0.5
 
 
         kl_target = 0.01,     
@@ -136,7 +132,7 @@ run_config = RunConfig(
     name=f"PPO_{nr_of_subdirectories}",
     storage_path=os.path.abspath(checkpoints_dir),
     
-    stop={"training_iteration": 1000},
+    stop={"training_iteration": 500},
 
 
     failure_config=FailureConfig(
@@ -187,34 +183,34 @@ def custom_trial_dirname(trial):
 def custom_trial_name(trial):
     return f"Experiment_{trial.trial_id}"
 
-tuner = tune.Tuner(
-    "PPO",
-    tune_config=tune.TuneConfig(
+# tuner = tune.Tuner(
+#     "PPO",
+#     tune_config=tune.TuneConfig(
 
-        metric=run_config.checkpoint_config.checkpoint_score_attribute, 
-        mode=run_config.checkpoint_config.checkpoint_score_order,
+#         metric=run_config.checkpoint_config.checkpoint_score_attribute, 
+#         mode=run_config.checkpoint_config.checkpoint_score_order,
 
-        num_samples=1,
+#         num_samples=1,
 
-        #search_alg=algo,
-        #scheduler=scheduler, 
+#         #search_alg=algo,
+#         #scheduler=scheduler, 
 
-        trial_dirname_creator=custom_trial_dirname,
-        trial_name_creator=custom_trial_name
-    ),            
-    param_space=config,         
-    run_config=run_config,    
-)
-
-
-# tuner = tune.Tuner.restore(   
-#     path=os.path.abspath("./A-checkpoints/2026-04-27/PPO_0"), 
-#     trainable="PPO",
-#     resume_unfinished=True,
-#     resume_errored = True,
-#     param_space=config, 
-
+#         trial_dirname_creator=custom_trial_dirname,
+#         trial_name_creator=custom_trial_name
+#     ),            
+#     param_space=config,         
+#     run_config=run_config,    
 # )
+
+
+tuner = tune.Tuner.restore(   
+    path=os.path.abspath("./A-checkpoints/2026-05-05/PPO_0"), 
+    trainable="PPO",
+    resume_unfinished=True,
+    resume_errored = True,
+    param_space=config, 
+
+)
 
 
 #TRAIN

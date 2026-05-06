@@ -11,11 +11,15 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         super().__init__()
         sa_env = gym.make(env_id, render_mode=render_mode, config=config) #"intersection-v1"
         self.env = MultiAgentWrapper(sa_env)
+
+        obs_cfg = config.get("observation", {}).get("observation_config", {})
+        self._is_absolute = obs_cfg.get("absolute", True)
         
         self._agent_list = [f"agent_{i}" for i in range(config["controlled_vehicles"])]
         self._agent_ids = set(self._agent_list)
 
-         #TODOO deletable
+
+        
         self.agents = self._agent_ids
         self.possible_agents = self._agent_ids
     
@@ -48,16 +52,78 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         self._action_space_in_preferred_format = True
 
 
+
+    def _process_obs(self, agent_obs_matrix):
+
+        if self._is_absolute:
+            return agent_obs_matrix.flatten().astype(np.float32)
+
+        rel_obs = agent_obs_matrix.copy()
+        
+        # True only where the vehicle is present (presence = 1)
+        present_mask = rel_obs[:, 0] == 1.0
+
+        # extract all features 
+        # 1=x, 2=y, 3=vx, 4=vy, 5=cos_h, 6=sin_h
+        ego_x = rel_obs[0, 1]
+        ego_y = rel_obs[0, 2]
+        ego_vx = rel_obs[0, 3]
+        ego_vy = rel_obs[0, 4]
+        ego_cos = rel_obs[0, 5]
+        ego_sin = rel_obs[0, 6]
+
+        # 3. TRASLATION (relative space)
+        #subtract position features to all present vehicles
+        rel_obs[present_mask, 1] -= ego_x
+        rel_obs[present_mask, 2] -= ego_y
+        rel_obs[present_mask, 3] -= ego_vx
+        rel_obs[present_mask, 4] -= ego_vy
+
+        # 4. ROTATION (Ego-Centric Frame)
+        # extract traslated positions
+        dx = rel_obs[present_mask, 1].copy()
+        dy = rel_obs[present_mask, 2].copy()
+        dvx = rel_obs[present_mask, 3].copy()
+        dvy = rel_obs[present_mask, 4].copy()
+        
+    
+        # extract cos e sin of present vehicles
+        other_cos = rel_obs[present_mask, 5].copy()
+        other_sin = rel_obs[present_mask, 6].copy()
+
+       
+        # Apply inverse rotation matrix
+        
+        # rotated positions
+        rel_obs[present_mask, 1] = dx * ego_cos + dy * ego_sin
+        rel_obs[present_mask, 2] = -dx * ego_sin + dy * ego_cos
+        
+        # rotated speeds
+        rel_obs[present_mask, 3] = dvx * ego_cos + dvy * ego_sin
+        rel_obs[present_mask, 4] = -dvx * ego_sin + dvy * ego_cos
+        
+        # rotated heading
+        # cos(A - B) = cos(A)cos(B) + sin(A)sin(B)
+        # sin(A - B) = sin(A)cos(B) - cos(A)sin(B)
+        rel_obs[present_mask, 5] = other_cos * ego_cos + other_sin * ego_sin
+        rel_obs[present_mask, 6] = other_sin * ego_cos - other_cos * ego_sin
+
+        return rel_obs.flatten().astype(np.float32)
+
+
     def reset(self, *, seed=None, options=None):
         self._terminated_agents = set()
 
         obs, info = self.env.reset(seed=seed, options=options)
         
-        # obs are flattened in the wrapper (flattenobservations() in the algorithm config caused errors)
-        flat_obs = {
-            agent_id: obs[i].flatten().astype(np.float32)
-            for i, agent_id in enumerate(self._agent_list)
-        }
+        flat_obs = {}
+
+        for i, agent_id in enumerate(self._agent_list):
+            flat_obs[agent_id] = self._process_obs(obs[i])
+
+
+            
+
         
         return flat_obs, {agent_id: info for agent_id in self._agent_list}
 
@@ -83,7 +149,8 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         
         
         obs, rewards, dones, truncated, info = self.env.step(actions)
-    
+
+
         obs_dict = {}
         rew_dict = {}
         term_dict = {}
@@ -95,8 +162,12 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         is_info_iterable = isinstance(info, (list, tuple, np.ndarray))
         
         for i, agent_id in enumerate(self._agent_list):
-            if agent_id not in self._terminated_agents:                                              
-                obs_dict[agent_id] = obs[i].flatten()
+            if agent_id not in self._terminated_agents:   
+            
+
+                obs_dict[agent_id] = self._process_obs(obs[i])
+    
+
                 rew_dict[agent_id] = rewards[i]
                 term_dict[agent_id] = dones[i]
                 

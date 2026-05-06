@@ -66,17 +66,21 @@ def compute_continous_actions(multi_rl_module, obs, env_agent_ids):
 
 
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/run7/PPO_5/lr_scheduled_ID_2e1d2_00000/checkpoint_000052"
+    "./A-checkpoints/run11/PPO_0/lr_scheduled_ID_8d147_00000/checkpoint_000046"
     )  
 
 
 NR_AGENTS = 2
 ENV_CONFIG = get_improved_Simple_config(num_agents=NR_AGENTS)
-ENV_CONFIG["simulation_frequency"] = 30
+ENV_CONFIG["simulation_frequency"] = 15
 
 
-ENV_CONFIG["spawn_points"] = ["3", "1"]
-ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+ENV_CONFIG["spawn_points"] = ["0", "2"]
+ENV_CONFIG["multi_destinations"] = ["o2", "o3"]
+
+#ENV_CONFIG["spawn_points"] = ["3", "1"]
+#ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+
 
 # ENV_CONFIG["spawn_points"] = ["0", "1"]
 # ENV_CONFIG["multi_destinations"] = ["o2", "o3"]
@@ -93,7 +97,7 @@ multi_rl_module = MultiRLModule.from_checkpoint(
 )
 
 
-RENDER_MODE = "human"
+RENDER_MODE =  "human"
 ma_env = RLlibHighwayWrapper(config=ENV_CONFIG, env_id="customIntersection-env-v0", render_mode=RENDER_MODE)
 
 
@@ -120,22 +124,24 @@ for ep in range(NUM_TEST_EPISODES):
     
     while not (done["__all__"] or truncated["__all__"]):
        
+        # print("DEBUG: obs: ", obs)
         agents_actions = compute_actions(multi_rl_module, obs)
-        print("DEBUG:", agents_actions)
+      
        
         obs, reward, done, truncated, info = ma_env.step(agents_actions)
-        
+        print(reward)
+        print(obs)
         ep_reward += sum(reward.values())
 
         if RENDER_MODE != None:
             ma_env.render()
 
-        print("@@info:")
-        pprint.pprint(info)
+        # print("@@info:")
+        # pprint.pprint(info)
 
-   
-    last_info = list(info.values())[0] if info else {}
     
+    last_info = list(info.values())[0] if info else {}
+        
     is_crashed = last_info.get('crashed', False)
   
     is_success = last_info.get("all_arrived", False)

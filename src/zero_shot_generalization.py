@@ -96,7 +96,7 @@ def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
 
         while not (terminated["__all__"] or truncated["__all__"]):
             
-            agents_actions = compute_continous_actions(multi_rl_module, obs, all_agent_ids)
+            agents_actions = compute_actions(multi_rl_module, obs)
 
             obs, reward, terminated, truncated, info = env.step(agents_actions)
             ep_reward += sum(reward.values()) 
@@ -150,12 +150,12 @@ NUM_TEST_EPISODES = 200
 NUM_WORKERS = 7 
 
 def get_base_config():
-    config = get_simple_multi_agent_config(num_agents=NR_AGENTS)
+    config = get_improved_Simple_config(num_agents=NR_AGENTS)
     config["simulation_frequency"] = 15
     return config
 
 
-checkpoint = "./A-checkpoints/2026-04-27/PPO_0/lr_scheduled_ID_e36b4_00000/checkpoint_000029"
+checkpoint = "./A-checkpoints/run12/PPO_0/lr_scheduled_ID_a12e7_00000/checkpoint_000041"
 scenarios = [
     {
         "name": "31-o0o3 on 31-o0o3 ",
