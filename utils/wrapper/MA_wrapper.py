@@ -72,7 +72,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         ego_cos = rel_obs[0, 5]
         ego_sin = rel_obs[0, 6]
 
-        # 3. TRASLATION (relative space)
+        # 3. TRANSLATION (relative space)
         #subtract position features to all present vehicles
         rel_obs[present_mask, 1] -= ego_x
         rel_obs[present_mask, 2] -= ego_y
@@ -85,7 +85,6 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         dy = rel_obs[present_mask, 2].copy()
         dvx = rel_obs[present_mask, 3].copy()
         dvy = rel_obs[present_mask, 4].copy()
-        
     
         # extract cos e sin of present vehicles
         other_cos = rel_obs[present_mask, 5].copy()
@@ -95,8 +94,8 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         # Apply inverse rotation matrix
         
         # rotated positions
-        rel_obs[present_mask, 1] = dx * ego_cos + dy * ego_sin
-        rel_obs[present_mask, 2] = -dx * ego_sin + dy * ego_cos
+        rel_obs[present_mask, 1] = dx * ego_cos + dy * ego_sin # x′ =xcos(θ)+ysin(θ)
+        rel_obs[present_mask, 2] = -dx * ego_sin + dy * ego_cos # y′ =−xsin(θ)+ycos(θ)
         
         # rotated speeds
         rel_obs[present_mask, 3] = dvx * ego_cos + dvy * ego_sin
