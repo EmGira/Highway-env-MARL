@@ -133,4 +133,97 @@ def get_improved_Simple_config(num_agents=2, obs_type="Kinematics"):
         "destination": None,
         "multi_destinations": None,
         "spawn_points": None,
+
+
+        "randomize_spawn_points": False,
+        "randomize_destinations": False
     }
+
+
+
+
+def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
+    return {
+        "observation": { 
+            "type": "MultiAgentObservation",
+            "observation_config": { 
+                "type": obs_type,
+                "vehicles_count": 15,
+                "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
+                "features_range": {
+                    "x": [-100, 100],
+                    "y": [-100, 100],
+                    "vx": [-20, 20],
+                    "vy": [-20, 20],
+                },
+                "absolute": False, 
+                "flatten": False,
+                "observe_intentions": False, 
+            }
+        },
+
+        "action": {
+            "type": "MultiAgentAction",
+            "action_config": {
+                "type": "DiscreteMetaAction",
+                "longitudinal": True,
+                "lateral": True,
+                "target_speeds": [0, 1.5, 3, 4.5, 6],
+            }
+        },
+
+        "duration": 60,  # [s]
+        
+
+        # Rewards & Penalties
+        "collision_reward": -50, 
+        "arrived_reward": 50, 
+
+        "high_speed_reward": 0.5,
+        "reward_speed_range": [0, 6],
+        
+        
+        "offroad_terminal": False,
+
+        "speeding_penalty": -0.01,     #-2
+        "tailgating_penalty": 0,   #-2
+        "stopped_penalty": 0,
+        "step_penalty": -0.01,
+
+        "normalize_reward": True, 
+        
+        # Simulation specifics
+        "initial_simulation_steps": 7, 
+        "ego_vehicle_speed_limit": 9, 
+
+        "controlled_vehicles": num_agents,
+        "initial_vehicle_count": 0, 
+        "spawn_probability": 0,
+
+
+
+        #Visualization
+        "screen_width": 1200,
+        "screen_height": 1200,
+        "centering_position": [0.5, 0.6],
+        "scaling": 5.5 * 1.3,
+
+        #Destinations and spawn points
+        "destination": None,
+        "multi_destinations": None,
+        "spawn_points": None,
+
+
+        "randomize_spawn_points": True,
+        "randomize_destinations": True,
+
+        "disable_challenger_vehicle": True
+        
+        #Note: 
+        # randomize_spawn_points overrrides spawn_points if spawn points is not None.
+        # if spawn_points none and randomize_spawn_points: False, spawns are predetermined by the ego vehicle id.
+        # same goes fore destinations.
+    }
+
+
+

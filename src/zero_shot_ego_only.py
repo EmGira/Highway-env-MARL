@@ -21,7 +21,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config, get_ego_only_config
 
 ray.init(ignore_reinit_error=True)
 
@@ -112,7 +112,7 @@ def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
 
 def run_distributed_evaluation(policy_name, checkpoint_path, env_config, total_episodes=100, num_workers=4):
     print(f"\n{'='*50}")
-    print(f"Validating: {policy_name} on {num_workers} workers")
+    print(f"Validating: {policy_name}")
     print(f"{'='*50}")
     
 
@@ -144,74 +144,32 @@ def run_distributed_evaluation(policy_name, checkpoint_path, env_config, total_e
     
     return aggregated_history, mean_reward, std_reward
 
+def compute_duration(nAgents):
+    if(nAgents <=    4):
+        return 60
+    else:
+        return 60 + 10*nAgents
+    
 
-NR_AGENTS = 3
-NUM_TEST_EPISODES = 200
+
+MAX_NR_AGENTS = 10
+NUM_TEST_EPISODES = 100
 NUM_WORKERS = 7 
 
 def get_base_config():
-    config = get_improved_Simple_config(num_agents=NR_AGENTS)
+    config = get_ego_only_config()
     config["simulation_frequency"] = 15
     return config
 
 
-checkpoint = "./A-checkpoints/run12/PPO_0/lr_scheduled_ID_a12e7_00000/checkpoint_000021"
+checkpoint = "./A-checkpoints/run13-2/PPO_0/lr_scheduled_ID_50ee8_00000/checkpoint_000007"
+
 scenarios = [
     {
-        "name": "31-o0o3 on 31-o0o3 ",
+        "name": f"{nAgents} agents",
         "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["3", "1"], "multi_destinations": ["o0", "o3"]} #NATIVE, the policy evaluated on the config it was trained on
-    },
-    #SPECULAR, to test relative observations
-    {
-        "name": "31-o0o3 on 13-o3o0 ",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["1", "3"], "multi_destinations": ["o3", "o0"]}
-    },
-    {
-        "name": "31-o0o3 on 20-o3o2 ",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["2", "0"], "multi_destinations": ["o3", "o2"]}
-    },
-
-    # "HARD maps" new scenarios where the agents cross paths 
-    {   
-        "name": "31-o0o3 on 21-o3o3 ",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["2", "1"], "multi_destinations": ["o3", "o3"]}
-    },
-    {   
-        "name": "31-o0o3 on 01-o2o3 ",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["0", "1"], "multi_destinations": ["o2", "o3"]}
-    },
-    {   
-        "name": "31-o0o3 on 12-o3o0 ",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["1", "2"], "multi_destinations": ["o3", "o0"]}
-    },
-    {   
-        "name": "31-o0o3 on 11-o2o2 ",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["1", "1"], "multi_destinations": ["o2", "o2"]}
-    },
-
-    # "EASY maps" new scenarios where the agents do not cross paths:
-    {
-        "name": "31-o0o3 on 01-o1o0 ",                          
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["0", "1"], "multi_destinations": ["o1", "o0"]} 
-    },
-    {
-        "name": "31-o0o3 on 02-o0o2",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["0", "2"], "multi_destinations": ["o0", "o2"]}
-    },
-    {
-        "name": "31-o0o3 on 31-o1o3",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "spawn_points": ["3", "1"], "multi_destinations": ["o1", "o3"]}
-    },
+        "config": {**get_base_config(), "controlled_vehicles" : nAgents, "duration": compute_duration(nAgents) } 
+    }   for nAgents in range(2, MAX_NR_AGENTS+1)
  
 ]
 
@@ -266,7 +224,7 @@ def plot_comparison(results):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
 
-    axs[0].set_title('Reward Distribution per Configuration', fontsize=14)
+    axs[0].set_title('Reward Distribution per Nr of agents', fontsize=14)
     axs[0].set_ylabel('Episode Return', fontsize=12)
     axs[0].grid(True, linestyle='--', alpha=0.4, axis='y')
     # Ruotiamo le etichette per non farle accavallare
@@ -297,7 +255,7 @@ def plot_comparison(results):
     plt.tight_layout()
     plt.subplots_adjust(top=0.92) 
     
-    plt.savefig("ZSG_run5.svg", format="svg")
+    plt.savefig("ZSG.svg", format="svg")
     plt.show()
 
 

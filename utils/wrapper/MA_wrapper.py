@@ -7,11 +7,12 @@ from highway_env.envs.common.abstract import MultiAgentWrapper
 import numpy as np
 
 class RLlibHighwayWrapper(MultiAgentEnv):
-    def __init__(self, config, env_id, render_mode = None): 
+    def __init__(self, config, env_id, render_mode = None, inference_mode = False): 
         super().__init__()
         sa_env = gym.make(env_id, render_mode=render_mode, config=config) #"intersection-v1"
         self.env = MultiAgentWrapper(sa_env)
-
+        self.inference_mode = inference_mode
+        
         obs_cfg = config.get("observation", {}).get("observation_config", {})
         self._is_absolute = obs_cfg.get("absolute", True)
         
@@ -72,7 +73,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         ego_cos = rel_obs[0, 5]
         ego_sin = rel_obs[0, 6]
 
-        # 3. TRASLATION (relative space)
+        # 3. TRANSLATION (relative space)
         #subtract position features to all present vehicles
         rel_obs[present_mask, 1] -= ego_x
         rel_obs[present_mask, 2] -= ego_y
@@ -85,7 +86,6 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         dy = rel_obs[present_mask, 2].copy()
         dvx = rel_obs[present_mask, 3].copy()
         dvy = rel_obs[present_mask, 4].copy()
-        
     
         # extract cos e sin of present vehicles
         other_cos = rel_obs[present_mask, 5].copy()
@@ -95,8 +95,8 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         # Apply inverse rotation matrix
         
         # rotated positions
-        rel_obs[present_mask, 1] = dx * ego_cos + dy * ego_sin
-        rel_obs[present_mask, 2] = -dx * ego_sin + dy * ego_cos
+        rel_obs[present_mask, 1] = dx * ego_cos + dy * ego_sin # x′ =xcos(θ)+ysin(θ)
+        rel_obs[present_mask, 2] = -dx * ego_sin + dy * ego_cos # y′ =−xsin(θ)+ycos(θ)
         
         # rotated speeds
         rel_obs[present_mask, 3] = dvx * ego_cos + dvy * ego_sin
@@ -143,7 +143,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             if agent_id in action_dict:
                 actions.append(action_dict[agent_id])
             else:
-                actions.append(4) #default action when terminated
+                actions.append(1) #default action when terminated
         
         actions = tuple(actions)
         
@@ -185,9 +185,14 @@ class RLlibHighwayWrapper(MultiAgentEnv):
                     self._terminated_agents.add(agent_id)
         
         #episoded end only when all agents are terminated
+        
         is_all_done = len(self._terminated_agents) == len(self._agent_list)
         
-        term_dict["__all__"] = is_all_done
+        if self.inference_mode == True:
+            term_dict["__all__"] = is_all_done or info.get("crashed", False)
+        else:
+            term_dict["__all__"] = is_all_done
+            
         trunc_dict["__all__"] = False 
         
         if is_all_done:
