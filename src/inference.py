@@ -18,7 +18,7 @@ sys.path.insert(0, parent_folder)
 
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config, get_ego_only_config
 
 
 def compute_actions(multi_rl_module, obs):
@@ -66,17 +66,17 @@ def compute_continous_actions(multi_rl_module, obs, env_agent_ids):
 
 
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/run12/PPO_0/lr_scheduled_ID_a12e7_00000/checkpoint_000021"
+    "./A-checkpoints/2026-05-09/PPO_0/lr_scheduled_ID_b1195_00000/checkpoint_000005"
     )  
 
 
-NR_AGENTS = 3
-ENV_CONFIG = get_improved_Simple_config(num_agents=NR_AGENTS)
+NR_AGENTS = 4
+ENV_CONFIG = get_ego_only_config(num_agents=NR_AGENTS)
 ENV_CONFIG["simulation_frequency"] = 15
 
-
-ENV_CONFIG["spawn_points"] = ["0", "1", "2"]
-ENV_CONFIG["multi_destinations"] = ["o1", "o0", "o0"]
+ENV_CONFIG["duration"] = 160
+ENV_CONFIG["spawn_points"] = ["1", "1", "1"]
+ENV_CONFIG["multi_destinations"] = ["o3", "o0", "o2"]
 
 #ENV_CONFIG["spawn_points"] = ["3", "1"]
 #ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
@@ -98,7 +98,7 @@ multi_rl_module = MultiRLModule.from_checkpoint(
 
 
 RENDER_MODE =  "human"
-ma_env = RLlibHighwayWrapper(config=ENV_CONFIG, env_id="customIntersection-env-v0", render_mode=RENDER_MODE)
+ma_env = RLlibHighwayWrapper(config=ENV_CONFIG, env_id="customIntersection-env-v0", render_mode=RENDER_MODE, inference_mode=True)
 
 
 
@@ -124,7 +124,7 @@ for ep in range(NUM_TEST_EPISODES):
     
     while not (done["__all__"] or truncated["__all__"]):
        
-        # print("DEBUG: obs: ", obs)
+        
         agents_actions = compute_actions(multi_rl_module, obs)
       
        

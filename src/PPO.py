@@ -9,7 +9,7 @@ sys.path.insert(0, parent_folder)
 
 from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 from utils.callbacks.Callbacks import CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
+from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config, get_ego_only_config
 import highway_env
 
 import ray
@@ -52,11 +52,11 @@ nr_of_subdirectories, checkpoints_dir, today = initialize()
 
 
 #CONFIG
-NR_AGENTS = 2
-ENV_CONFIG = get_improved_Simple_config(NR_AGENTS)
+NR_AGENTS = 4
+ENV_CONFIG = get_ego_only_config(NR_AGENTS)
 
-ENV_CONFIG["spawn_points"] = ["3", "1"]
-ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
+# ENV_CONFIG["spawn_points"] = ["3", "1"]
+# ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
 
 # ENV_CONFIG["spawn_points"] = ["0", "1"]
 # ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
@@ -85,18 +85,18 @@ config = (
     )
     .training( 
         
-        train_batch_size_per_learner=4096,
-        minibatch_size=256,          
+        train_batch_size_per_learner=8192,
+        minibatch_size=512,          
         clip_param=0.1,                 
         
       
-        entropy_coeff = 0.0028,
-        num_epochs = 4,
+        entropy_coeff = 0.005,
+        num_epochs = 10,
         lr =
             [[0, 3e-4], [2000000, 1e-5]]
         ,
 
-        gamma = 0.95, #before: 0.995
+        gamma = 0.98, #before: 0.95
 
 
         use_critic = True,           
@@ -183,34 +183,35 @@ def custom_trial_dirname(trial):
 def custom_trial_name(trial):
     return f"Experiment_{trial.trial_id}"
 
-# tuner = tune.Tuner(
-#     "PPO",
-#     tune_config=tune.TuneConfig(
 
-#         metric=run_config.checkpoint_config.checkpoint_score_attribute, 
-#         mode=run_config.checkpoint_config.checkpoint_score_order,
+tuner = tune.Tuner(
+    "PPO",
+    tune_config=tune.TuneConfig(
 
-#         num_samples=1,
+        metric=run_config.checkpoint_config.checkpoint_score_attribute, 
+        mode=run_config.checkpoint_config.checkpoint_score_order,
 
-#         #search_alg=algo,
-#         #scheduler=scheduler, 
+        num_samples=1,
 
-#         trial_dirname_creator=custom_trial_dirname,
-#         trial_name_creator=custom_trial_name
-#     ),            
-#     param_space=config,         
-#     run_config=run_config,    
-# )
+        #search_alg=algo,
+        #scheduler=scheduler, 
 
-
-tuner = tune.Tuner.restore(   
-    path=os.path.abspath("./A-checkpoints/2026-05-05/PPO_0"), 
-    trainable="PPO",
-    resume_unfinished=True,
-    resume_errored = True,
-    param_space=config, 
-
+        trial_dirname_creator=custom_trial_dirname,
+        trial_name_creator=custom_trial_name
+    ),            
+    param_space=config,         
+    run_config=run_config,    
 )
+
+
+# tuner = tune.Tuner.restore(   
+#     path=os.path.abspath("./A-checkpoints/run13-1/PPO_0"), 
+#     trainable="PPO",
+#     resume_unfinished=True,
+#     resume_errored = True,
+#     param_space=config, 
+
+# )
 
 
 #TRAIN

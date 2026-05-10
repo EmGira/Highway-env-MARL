@@ -7,11 +7,12 @@ from highway_env.envs.common.abstract import MultiAgentWrapper
 import numpy as np
 
 class RLlibHighwayWrapper(MultiAgentEnv):
-    def __init__(self, config, env_id, render_mode = None): 
+    def __init__(self, config, env_id, render_mode = None, inference_mode = False): 
         super().__init__()
         sa_env = gym.make(env_id, render_mode=render_mode, config=config) #"intersection-v1"
         self.env = MultiAgentWrapper(sa_env)
-
+        self.inference_mode = inference_mode
+        
         obs_cfg = config.get("observation", {}).get("observation_config", {})
         self._is_absolute = obs_cfg.get("absolute", True)
         
@@ -142,7 +143,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             if agent_id in action_dict:
                 actions.append(action_dict[agent_id])
             else:
-                actions.append(4) #default action when terminated
+                actions.append(1) #default action when terminated
         
         actions = tuple(actions)
         
@@ -184,9 +185,14 @@ class RLlibHighwayWrapper(MultiAgentEnv):
                     self._terminated_agents.add(agent_id)
         
         #episoded end only when all agents are terminated
+        
         is_all_done = len(self._terminated_agents) == len(self._agent_list)
         
-        term_dict["__all__"] = is_all_done
+        if self.inference_mode == True:
+            term_dict["__all__"] = is_all_done or info.get("crashed", False)
+        else:
+            term_dict["__all__"] = is_all_done
+            
         trunc_dict["__all__"] = False 
         
         if is_all_done:
