@@ -21,7 +21,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config, get_ego_only_config
+from configs.intersection.IntersectionConfigs import get_improved_Simple_config, get_ego_only_config
 
 ray.init(ignore_reinit_error=True)
 
@@ -79,7 +79,7 @@ def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
     multi_rl_module = MultiRLModule.from_checkpoint(
         Path(checkpoint_path) / "learner_group" / "learner" / "rl_module"
     )
-    env = RLlibHighwayWrapper(config=env_config, env_id="customIntersection-env-v0", render_mode=None)
+    env = RLlibHighwayWrapper(config=env_config, env_id="customIntersection-env-v0", render_mode=None, inference_mode=True)
 
     worker_history = {
         "rewards": [],
@@ -152,23 +152,24 @@ def compute_duration(nAgents):
     
 
 
-MAX_NR_AGENTS = 10
-NUM_TEST_EPISODES = 100
+MAX_NR_AGENTS = 13
+NUM_TEST_EPISODES = 200
 NUM_WORKERS = 7 
 
 def get_base_config():
     config = get_ego_only_config()
     config["simulation_frequency"] = 15
+    config["randomize_controlled_vehicles"] = False
     return config
 
 
-checkpoint = "./A-checkpoints/run13-2/PPO_0/lr_scheduled_ID_50ee8_00000/checkpoint_000007"
+checkpoint = "./A-checkpoints/2026-05-23/PPO_0/lr_scheduled_ID_fc455_00000/checkpoint_000047"
 
 scenarios = [
     {
         "name": f"{nAgents} agents",
         "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "controlled_vehicles" : nAgents, "duration": compute_duration(nAgents) } 
+        "config": {**get_base_config(), "controlled_vehicles" : nAgents } 
     }   for nAgents in range(2, MAX_NR_AGENTS+1)
  
 ]
@@ -196,7 +197,7 @@ def plot_comparison(results):
     #sort by success rate
     results_sorted = sorted(
         results, 
-        key=lambda x: sum(x["history"]["successes"]) / len(x["history"]["successes"]), 
+        key=lambda x: x["name"], #sum(x["history"]["successes"]) / len(x["history"]["successes"]), 
         reverse=True
     )
     

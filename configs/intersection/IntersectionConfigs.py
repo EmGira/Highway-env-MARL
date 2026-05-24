@@ -70,8 +70,8 @@ def get_improved_Simple_config(num_agents=2, obs_type="Kinematics"):
             "type": "MultiAgentObservation",
             "observation_config": { 
                 "type": obs_type,
-                "vehicles_count": 15,
-                "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
+                "vehicles_count": 6,
+                "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h", "cos_d", "sin_d"],
                 "features_range": {
                     "x": [-100, 100],
                     "y": [-100, 100],
@@ -136,7 +136,12 @@ def get_improved_Simple_config(num_agents=2, obs_type="Kinematics"):
 
 
         "randomize_spawn_points": False,
-        "randomize_destinations": False
+        "randomize_destinations": False,
+
+        "randomize_controlled_vehicles": False,
+        "controlled_vehicles_range": None,
+
+        "disable_challenger_vehicle": False
     }
 
 
@@ -148,8 +153,8 @@ def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
             "type": "MultiAgentObservation",
             "observation_config": { 
                 "type": obs_type,
-                "vehicles_count": 15,
-                "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
+                "vehicles_count": 10, #15
+                "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h", "cos_d", "sin_d"],
                 "features_range": {
                     "x": [-100, 100],
                     "y": [-100, 100],
@@ -158,7 +163,10 @@ def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
                 },
                 "absolute": False, 
                 "flatten": False,
-                "observe_intentions": False, 
+                "observe_intentions": True,  #changed from True to false, to populate cos_d and sin_d
+                #
+                "normalize" : False, ## default: True
+                "see_behind" : True ## default: False
             }
         },
 
@@ -172,7 +180,7 @@ def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
             }
         },
 
-        "duration": 60,  # [s]
+        "duration": 300,  # [s]
         
 
         # Rewards & Penalties
@@ -188,7 +196,7 @@ def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
         "speeding_penalty": -0.01,     #-2
         "tailgating_penalty": 0,   #-2
         "stopped_penalty": 0,
-        "step_penalty": -0.01,
+        "step_penalty": -0.05,
 
         "normalize_reward": True, 
         
@@ -216,6 +224,9 @@ def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
 
         "randomize_spawn_points": True,
         "randomize_destinations": True,
+
+        "randomize_controlled_vehicles": True,
+        "controlled_vehicles_range": [2,4,6,8,10],
 
         "disable_challenger_vehicle": True
         
