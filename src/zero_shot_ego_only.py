@@ -152,7 +152,7 @@ def compute_duration(nAgents):
     
 
 
-MAX_NR_AGENTS = 13
+MAX_NR_AGENTS = 10
 NUM_TEST_EPISODES = 200
 NUM_WORKERS = 7 
 
@@ -163,7 +163,7 @@ def get_base_config():
     return config
 
 
-checkpoint = "./A-checkpoints/2026-05-23/PPO_0/lr_scheduled_ID_fc455_00000/checkpoint_000047"
+checkpoint = "./A-checkpoints/Extrapolation/PPO_1/ID_9b905_00000/checkpoint_000022"
 
 scenarios = [
     {
@@ -197,9 +197,10 @@ def plot_comparison(results):
     #sort by success rate
     results_sorted = sorted(
         results, 
-        key=lambda x: x["name"], #sum(x["history"]["successes"]) / len(x["history"]["successes"]), 
-        reverse=True
+        key=lambda x:  int(x["name"].split()[0]), #sum(x["history"]["successes"]) / len(x["history"]["successes"]), 
+        reverse=False
     )
+    
     
     num_episodes = len(results_sorted[0]["history"]["crashes"])
     

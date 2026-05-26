@@ -37,15 +37,15 @@ def compute_actions(multi_rl_module, obs):
     return agents_actions
 
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/2026-05-23/PPO_0/lr_scheduled_ID_fc455_00000/checkpoint_000047"
+    "./A-checkpoints/2026-05-25/PPO_1/ID_9b905_00000/checkpoint_000005"
     )  
 
 
-NR_AGENTS = 10
+NR_AGENTS = 3
 ENV_CONFIG = get_ego_only_config(num_agents=NR_AGENTS)
 
 ENV_CONFIG["simulation_frequency"] = 15
-#ENV_CONFIG["randomize_controlled_vehicles"] = False
+ENV_CONFIG["randomize_controlled_vehicles"] = False
 
 pprint.pprint(ENV_CONFIG)
 
@@ -90,7 +90,7 @@ for ep in range(NUM_TEST_EPISODES):
        
         obs, reward, done, truncated, info = ma_env.step(agents_actions)
         # print(reward)
-        # print(obs)
+        print(obs)
         ep_reward += sum(reward.values())
 
         if RENDER_MODE != None:

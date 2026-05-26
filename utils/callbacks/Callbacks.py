@@ -24,9 +24,14 @@ class CrashLoggerCallback(RLlibCallback): #TODOO change to new API stack RLlibCa
 
        
         all_infos = episode.get_infos()  # {agent_1: [info, ...], agent_2: [info, ...]}
-      
+        first_infos = next(iter(all_infos.values()), [])
+        if first_infos and "controlled_vehicles" in first_infos[0]:
+            num_agents = first_infos[0]["controlled_vehicles"]
+        
+
         overall_success = 0
         overall_crashed = 0
+        
         crash_speeds = []
 
         for agent_id, infos in all_infos.items():
@@ -58,6 +63,18 @@ class CrashLoggerCallback(RLlibCallback): #TODOO change to new API stack RLlibCa
         metrics_logger.log_value("Custom/success_rate", overall_success,reduce="mean")
         metrics_logger.log_value("Custom/crash_incident_rate", overall_crashed, reduce="mean")
 
+        metrics_logger.log_value(
+            f"Custom/Density_{num_agents}/success_rate",
+            overall_success,
+            reduce="mean"
+        )
+        metrics_logger.log_value(
+            f"Custom/Density_{num_agents}/crash_rate",
+            overall_crashed,
+            reduce="mean"
+        )
+
+     
         if crash_speeds:
             avg_crash_speed = sum(crash_speeds) / len(crash_speeds)
             metrics_logger.log_value("Custom/speed_at_impact", avg_crash_speed, reduce="mean")

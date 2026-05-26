@@ -26,6 +26,7 @@ from optuna.storages import RDBStorage
 from pathlib import Path
 import datetime
 
+import argparse
 
 def initialize():
         
@@ -48,192 +49,165 @@ def initialize():
 def my_policy_mapping_fn(agent_id, episode, **kwargs):
     return agent_id
 
-nr_of_subdirectories, checkpoints_dir, today = initialize()
-
-
-#CONFIG
-NR_AGENTS = 4
-ENV_CONFIG = get_ego_only_config(NR_AGENTS)
-
-# ENV_CONFIG["spawn_points"] = ["3", "1"]
-# ENV_CONFIG["multi_destinations"] = ["o0", "o3"]
-
-# ENV_CONFIG["spawn_points"] = ["0", "1"]
-# ENV_CONFIG["multi_destinations"] = ["o1", "o0"]
-
-
-tune.register_env("CustomIntersection-env-v0", lambda config: RLlibHighwayWrapper(ENV_CONFIG, "customIntersection-env-v0")) #
-
-config = (
-    PPOConfig()
-    .environment(
-        env = "CustomIntersection-env-v0"
-    )
-    .framework("torch")
-    .env_runners(
-        num_env_runners=6,  
-        num_envs_per_env_runner=1,
-        sample_timeout_s=200.0,
-        rollout_fragment_length="auto",  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
-    )
-    .evaluation(
-        evaluation_num_env_runners=0,
-        evaluation_interval=10,
-        evaluation_duration=30,
-        evaluation_duration_unit="episodes", 
-
-    )
-    .training( 
-        
-        train_batch_size_per_learner=16384,
-        minibatch_size=1024,          
-        clip_param=0.2,                 
-        
-      
-        entropy_coeff = 0.02,
-        num_epochs = 10,
-        lr =
-            [[0, 3e-4], [5000000, 1e-5]]
-        ,
-
-        gamma = 0.97, #before: 0.95
-
-
-        use_critic = True,           
-        use_gae = True,               
-
-        lambda_ = 0.95,
-        vf_loss_coeff = 0.5,    # 0.5
-
-
-        kl_target = 0.01,     
-
-        #policy and value function dont share weights
-        model={
-        "vf_share_layers": False,
-        }  
-        
-    )
-    .learners(
-        num_learners=1,
-        num_gpus_per_learner=1
-    )
-    .multi_agent(
-
-        policies={"shared_policy"}, 
-        policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy",
-    )
-    .callbacks([CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback] )
-
-)
-
-run_config = RunConfig(
-
-    name=f"PPO_{nr_of_subdirectories}",
-    storage_path=os.path.abspath(checkpoints_dir),
-    
-    stop={"training_iteration": 500},
-
-
-    failure_config=FailureConfig(
-        max_failures=0,
-    ),
-   
-    checkpoint_config=CheckpointConfig(
-        num_to_keep = 3,
-        checkpoint_score_attribute = "safe_return_mean",
-        checkpoint_score_order = 'max',
-        checkpoint_frequency=10, 
-        checkpoint_at_end=True 
-    )
-
-)
-
-
-optuna_storage = RDBStorage(url="sqlite:///optuna_highway_results.db")
-study_name = f"PPO_Study_{today.strftime('%Y-%m-%d')}_Run_{nr_of_subdirectories}"
-algo = OptunaSearch(
-    storage=optuna_storage,
-    study_name=study_name,
-
-)
-
-scheduler = ASHAScheduler(    
-    max_t=run_config.stop["training_iteration"],                    
-    grace_period=30, 
-    reduction_factor=2
-)
-
-
-
 def custom_trial_dirname(trial):
-    
-    lr_config = trial.config.get("lr")
-
-    if not isinstance(lr_config, list):
-        lr_str = f"{lr_config:.7f}"
-    else:
-        lr_str = "scheduled"
-        
-    return f"lr_{lr_str}_ID_{trial.trial_id}"
-    
-
-
+    return f"ID_{trial.trial_id}"
 
 def custom_trial_name(trial):
     return f"Experiment_{trial.trial_id}"
 
 
-# tuner = tune.Tuner(
-#     "PPO",
-#     tune_config=tune.TuneConfig(
-
-#         metric=run_config.checkpoint_config.checkpoint_score_attribute, 
-#         mode=run_config.checkpoint_config.checkpoint_score_order,
-
-#         num_samples=1,
-
-#         #search_alg=algo,
-#         #scheduler=scheduler, 
-
-#         trial_dirname_creator=custom_trial_dirname,
-#         trial_name_creator=custom_trial_name
-#     ),            
-#     param_space=config,         
-#     run_config=run_config,    
-# )
 
 
-tuner = tune.Tuner.restore(   
-    path=os.path.abspath("./A-checkpoints/2026-05-23/PPO_0"), 
-    trainable="PPO",
-    resume_unfinished=True,
-    resume_errored = True,
-    param_space=config, 
+if __name__ == "__main__":
 
-)
-
-
-#TRAIN
-print("\n@@@ Initializing training...")
-results = tuner.fit()
+  
+    parser = argparse.ArgumentParser(description="Script to start or resume training with Ray Tune")
+    parser.add_argument("--resume", type=str, default=None, help="Path to the Run Folder from wich we want to resume training")
+    parser.add_argument("--enable_scheduler", action="store_true", help="Enables the ASHA scheduler for early stopping")
+    parser.add_argument("--enable_optuna", action="store_true", help="Enables Optuna for HyperParam search")
+    args = parser.parse_args()
 
 
-
-#EXTRACT
-best_result = results.get_best_result(
-    metric = run_config.checkpoint_config.checkpoint_score_attribute, 
-    mode = run_config.checkpoint_config.checkpoint_score_order
-)
-
-print("\n@@@ Training completed!")
-print(f"\t Results store here ==> {best_result.path}")
-print(f"\t For TensoBoard, execute ==> tensorboard --logdir={best_result.path}")
+    nr_of_subdirectories, checkpoints_dir, today = initialize()
+    ENV_CONFIG = get_ego_only_config(6)
+    tune.register_env("CustomIntersection-env-v0", lambda config: RLlibHighwayWrapper(config, "customIntersection-env-v0")) #
 
 
-shutdown()
+    config = (
+        PPOConfig()
+        .environment(
+            env = "CustomIntersection-env-v0",
+            env_config = ENV_CONFIG
+        )
+        .framework("torch")
+        .env_runners(
+            num_env_runners=6,  
+            num_envs_per_env_runner=1,
+            sample_timeout_s=200.0,
+            rollout_fragment_length="auto",  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
+        )
+        .evaluation(
+            evaluation_num_env_runners=0,
+            evaluation_interval=10,
+            evaluation_duration=30,
+            evaluation_duration_unit="episodes", 
+
+        )
+        .training( 
+            
+            train_batch_size_per_learner=16384,
+            minibatch_size=1024,          
+            clip_param=0.2,                 
+            
+        
+            entropy_coeff = 0.02,
+            num_epochs = 10,
+            
+            lr = [[0, 3e-4], [10000000, 1e-5]],
+            
+
+            gamma = 0.975, #before: 0.95
 
 
+            use_critic = True,           
+            use_gae = True,               
+
+            lambda_ = 0.95,
+            vf_loss_coeff = 0.5,    # 0.5
 
 
+            kl_target = 0.02,     
 
+            #policy and value function dont share weights
+            model={
+            "vf_share_layers": False,
+            }  
+            
+        )
+        .learners(
+            num_learners=1,
+            num_gpus_per_learner=1
+        )
+        .multi_agent(
+
+            policies={"shared_policy"}, 
+            policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy",
+        )
+        .callbacks([CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback] )
+
+    )
+
+    run_config = RunConfig(
+
+        name=f"PPO_{nr_of_subdirectories}",
+        storage_path=os.path.abspath(checkpoints_dir),
+        
+        stop={"training_iteration": 500},
+
+
+        failure_config=FailureConfig(
+            max_failures=0,
+        ),
+    
+        checkpoint_config=CheckpointConfig(
+            num_to_keep = 3,
+            checkpoint_score_attribute = "safe_return_mean",
+            checkpoint_score_order = 'max',
+            checkpoint_frequency=10, 
+            checkpoint_at_end=True 
+        )
+
+    )
+
+
+    algo = None
+    scheduler = None
+    if args.enable_optuna:
+        optuna_storage = RDBStorage(url="sqlite:///optuna_highway_results.db")
+        study_name = f"PPO_Study_{today.strftime('%Y-%m-%d')}_Run_{nr_of_subdirectories}"
+        algo = OptunaSearch(
+            storage=optuna_storage,
+            study_name=study_name,
+        )
+    if args.enable_scheduler:
+        scheduler = ASHAScheduler(    
+            max_t=run_config.stop["training_iteration"],                    
+            grace_period=30, 
+            reduction_factor=2
+        )
+
+
+    if args.resume is not None:
+        print(f"\n@@@ Resuming training from {args.resume}...")
+        tuner = tune.Tuner.restore(   
+            path=os.path.abspath(args.resume), 
+            trainable="PPO",
+            resume_unfinished=True,
+            resume_errored=True,
+            # param_space=config, 
+        )
+    else:
+        print("\n@@@ Initializing NEW training...")
+        tuner = tune.Tuner(
+            "PPO",
+            tune_config=tune.TuneConfig(
+                metric=run_config.checkpoint_config.checkpoint_score_attribute, 
+                mode=run_config.checkpoint_config.checkpoint_score_order,
+                num_samples=1,
+                trial_dirname_creator=custom_trial_dirname,
+                trial_name_creator=custom_trial_name,
+                search_alg=algo,
+                scheduler=scheduler, 
+            ),            
+            param_space=config,        
+            run_config=run_config,    
+        )
+
+
+    results = tuner.fit()
+
+
+    print("\n@@@ Training completed!")
+
+
+    shutdown()
