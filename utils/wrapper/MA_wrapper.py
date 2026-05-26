@@ -14,9 +14,15 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         self.inference_mode = inference_mode
         
         obs_cfg = config.get("observation", {}).get("observation_config", {})
-        self._is_absolute = obs_cfg.get("absolute", True)
+        self._is_absolute = obs_cfg.get("absolute", False)
         
-        self._agent_list = [f"agent_{i}" for i in range(config["controlled_vehicles"])]
+        if config.get("randomize_controlled_vehicles", False):
+            self._agent_list = [f"agent_{i}" for i in range(max(config["controlled_vehicles_range"]))]
+        else:
+            self._agent_list = [f"agent_{i}" for i in range(config["controlled_vehicles"])]
+
+        
+            
         self._agent_ids = set(self._agent_list)
 
 
@@ -38,6 +44,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         else:
             single_agent_obs_space = original_obs_space
         
+        single_agent_action_space = self.env.action_space[0]
 
         #turn obs_space and action_space into dictionary, wich is the format requested by RLlib for MA-envs
         self.observation_space = gym.spaces.Dict({
@@ -45,8 +52,8 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             for agent_id in self._agent_list
         })
         self.action_space = gym.spaces.Dict({
-            agent_id: self.env.action_space[i] 
-            for i, agent_id in enumerate(self._agent_list)
+            agent_id: single_agent_action_space
+            for agent_id in self._agent_list
         })
 
         self._obs_space_in_preferred_format = True #TODOO try removing these
@@ -70,8 +77,9 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         ego_y = rel_obs[0, 2]
         ego_vx = rel_obs[0, 3]
         ego_vy = rel_obs[0, 4]
-        ego_cos = rel_obs[0, 5]
-        ego_sin = rel_obs[0, 6]
+        ego_cos_h = rel_obs[0, 5]
+        ego_sin_h = rel_obs[0, 6]
+
 
         # 3. TRANSLATION (relative space)
         #subtract position features to all present vehicles
@@ -88,25 +96,28 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         dvy = rel_obs[present_mask, 4].copy()
     
         # extract cos e sin of present vehicles
-        other_cos = rel_obs[present_mask, 5].copy()
-        other_sin = rel_obs[present_mask, 6].copy()
-
+        other_cos_h = rel_obs[present_mask, 5].copy()
+        other_sin_h = rel_obs[present_mask, 6].copy()
+        other_cos_d = rel_obs[present_mask, 7].copy()
+        other_sin_d = rel_obs[present_mask, 8].copy()
        
         # Apply inverse rotation matrix
         
         # rotated positions
-        rel_obs[present_mask, 1] = dx * ego_cos + dy * ego_sin # x′ =xcos(θ)+ysin(θ)
-        rel_obs[present_mask, 2] = -dx * ego_sin + dy * ego_cos # y′ =−xsin(θ)+ycos(θ)
+        rel_obs[present_mask, 1] = dx * ego_cos_h + dy * ego_sin_h # x′ =xcos(θ)+ysin(θ)
+        rel_obs[present_mask, 2] = -dx * ego_sin_h + dy * ego_cos_h # y′ =−xsin(θ)+ycos(θ)
         
         # rotated speeds
-        rel_obs[present_mask, 3] = dvx * ego_cos + dvy * ego_sin
-        rel_obs[present_mask, 4] = -dvx * ego_sin + dvy * ego_cos
+        rel_obs[present_mask, 3] = dvx * ego_cos_h + dvy * ego_sin_h
+        rel_obs[present_mask, 4] = -dvx * ego_sin_h + dvy * ego_cos_h
         
         # rotated heading
         # cos(A - B) = cos(A)cos(B) + sin(A)sin(B)
         # sin(A - B) = sin(A)cos(B) - cos(A)sin(B)
-        rel_obs[present_mask, 5] = other_cos * ego_cos + other_sin * ego_sin
-        rel_obs[present_mask, 6] = other_sin * ego_cos - other_cos * ego_sin
+        rel_obs[present_mask, 5] = other_cos_h * ego_cos_h + other_sin_h * ego_sin_h
+        rel_obs[present_mask, 6] = other_sin_h * ego_cos_h - other_cos_h * ego_sin_h
+        rel_obs[present_mask, 7] = other_cos_d * ego_cos_h + other_sin_d * ego_sin_h
+        rel_obs[present_mask, 8] = other_sin_d * ego_cos_h - other_cos_d * ego_sin_h
 
         return rel_obs.flatten().astype(np.float32)
 
@@ -116,16 +127,19 @@ class RLlibHighwayWrapper(MultiAgentEnv):
 
         obs, info = self.env.reset(seed=seed, options=options)
         
+        num_active_agents = len(obs)
+        self._active_agents = [f"agent_{i}" for i in range(num_active_agents)]
+                               
         flat_obs = {}
+        info_dict = {}
+        is_info_iterable = isinstance(info, (list, tuple, np.ndarray))
 
-        for i, agent_id in enumerate(self._agent_list):
+        for i, agent_id in enumerate(self._active_agents):
             flat_obs[agent_id] = self._process_obs(obs[i])
-
-
-            
+            info_dict[agent_id] = info[i] if is_info_iterable else info
 
         
-        return flat_obs, {agent_id: info for agent_id in self._agent_list}
+        return flat_obs, info_dict
 
 
     def step(self, action_dict):
@@ -139,7 +153,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
 
         # build tuple of the actions of every agent
         actions = []
-        for agent_id in self._agent_list:
+        for agent_id in self._active_agents:
             if agent_id in action_dict:
                 actions.append(action_dict[agent_id])
             else:
@@ -161,7 +175,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         is_trunc_iterable = isinstance(truncated, (list, tuple, np.ndarray))
         is_info_iterable = isinstance(info, (list, tuple, np.ndarray))
         
-        for i, agent_id in enumerate(self._agent_list):
+        for i, agent_id in enumerate(self._active_agents):
             if agent_id not in self._terminated_agents:   
             
 
@@ -179,14 +193,14 @@ class RLlibHighwayWrapper(MultiAgentEnv):
 
            
                 agent_done = dones[i]
-                agent_trunc = truncated[i] if is_trunc_iterable else truncated
                 
-                if agent_done or agent_trunc:
+                
+                if agent_done or agent_truncated:
                     self._terminated_agents.add(agent_id)
         
         #episoded end only when all agents are terminated
         
-        is_all_done = len(self._terminated_agents) == len(self._agent_list)
+        is_all_done = len(self._terminated_agents) == len(self._active_agents)
         
         if self.inference_mode == True:
             term_dict["__all__"] = is_all_done or info.get("crashed", False)
