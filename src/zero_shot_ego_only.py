@@ -79,7 +79,7 @@ def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
     multi_rl_module = MultiRLModule.from_checkpoint(
         Path(checkpoint_path) / "learner_group" / "learner" / "rl_module"
     )
-    env = RLlibHighwayWrapper(config=env_config, env_id="customIntersection-env-v0", render_mode=None, inference_mode=True)
+    env = RLlibHighwayWrapper(config=env_config, env_id=ENV_ID, render_mode=None, inference_mode=False)
 
     worker_history = {
         "rewards": [],
@@ -156,6 +156,8 @@ MAX_NR_AGENTS = 10
 NUM_TEST_EPISODES = 200
 NUM_WORKERS = 7 
 
+ENV_ID = "customIntersection-env-v0"
+
 def get_base_config():
     config = get_ego_only_config()
     config["simulation_frequency"] = 15
@@ -163,7 +165,7 @@ def get_base_config():
     return config
 
 
-checkpoint = "./A-checkpoints/Extrapolation/PPO_1/ID_9b905_00000/checkpoint_000022"
+checkpoint = "./A-checkpoints/Extrapolation_512/PPO_0/ID_0e149_00000/checkpoint_000020"
 
 scenarios = [
     {
@@ -229,7 +231,7 @@ def plot_comparison(results):
     axs[0].set_title('Reward Distribution per Nr of agents', fontsize=14)
     axs[0].set_ylabel('Episode Return', fontsize=12)
     axs[0].grid(True, linestyle='--', alpha=0.4, axis='y')
-    # Ruotiamo le etichette per non farle accavallare
+ 
     axs[0].tick_params(axis='x', rotation=45) 
 
     

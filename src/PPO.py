@@ -16,6 +16,8 @@ import ray
 from ray import shutdown
 from ray import tune
 from ray.tune import RunConfig, CheckpointConfig, FailureConfig
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
+
 
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.tune.schedulers import ASHAScheduler
@@ -69,7 +71,11 @@ if __name__ == "__main__":
 
 
     nr_of_subdirectories, checkpoints_dir, today = initialize()
+
     ENV_CONFIG = get_ego_only_config(6)
+    ENV_CONFIG["randomize_controlled_vehicles"] = False
+    
+    
     tune.register_env("CustomIntersection-env-v0", lambda config: RLlibHighwayWrapper(config, "customIntersection-env-v0")) #
 
 
@@ -89,38 +95,35 @@ if __name__ == "__main__":
         .evaluation(
             evaluation_num_env_runners=0,
             evaluation_interval=10,
-            evaluation_duration=30,
+            evaluation_duration=60,
             evaluation_duration_unit="episodes", 
 
         )
         .training( 
             
             train_batch_size_per_learner=16384,
-            minibatch_size=1024,          
+            minibatch_size=2048,          
             clip_param=0.2,                 
             
         
-            entropy_coeff = 0.02,
-            num_epochs = 10,
+            entropy_coeff = 0.01,
+            num_epochs = 5,
             
-            lr = [[0, 3e-4], [10000000, 1e-5]],
+            #lr = [[0, 3e-4], [10000000, 1e-5]],
+            lr=3e-4, #3e-4
             
 
             gamma = 0.975, #before: 0.95
-
-
             use_critic = True,           
             use_gae = True,               
-
             lambda_ = 0.95,
             vf_loss_coeff = 0.5,    # 0.5
-
-
             kl_target = 0.02,     
 
             #policy and value function dont share weights
             model={
             "vf_share_layers": False,
+            "fcnet_hiddens":  [256, 256] #[256, 256],
             }  
             
         )
@@ -140,11 +143,12 @@ if __name__ == "__main__":
     run_config = RunConfig(
 
         name=f"PPO_{nr_of_subdirectories}",
+
         storage_path=os.path.abspath(checkpoints_dir),
         
-        stop={"training_iteration": 500},
+        stop={"training_iteration": 200},
 
-
+        
         failure_config=FailureConfig(
             max_failures=0,
         ),
@@ -184,7 +188,7 @@ if __name__ == "__main__":
             trainable="PPO",
             resume_unfinished=True,
             resume_errored=True,
-            # param_space=config, 
+            
         )
     else:
         print("\n@@@ Initializing NEW training...")
