@@ -21,44 +21,25 @@ from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
 from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config, get_ego_only_config
 
 
-def compute_actions(multi_rl_module, obs):
-    policy_module = multi_rl_module["shared_policy"]
-
-    with torch.no_grad():
-        agents_actions = {}
-        for agent_id, agent_obs in obs.items():
-            ao = torch.from_numpy(agent_obs).float().unsqueeze(0)
-            output = policy_module.forward_inference({"obs": ao})
-    
-            logits = output["action_dist_inputs"]
-            dist = torch.distributions.Categorical(logits=logits)
-            agents_actions[agent_id] = dist.sample().item()
-
-    return agents_actions
+from utils.evaluation_utils import load_policy_or_module, create_eval_env, compute_actions_stochastic, compute_actions_stochastic_legacy, compute_actions, compute_actions_legacy
 
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/2026-05-25/PPO_1/ID_9b905_00000/checkpoint_000005"
+    "./A-checkpoints/TEST/MAPPO3agenti/MAPPO_2/ID_a2e6e_00000/checkpoint_000005"
     )  
 
 
-NR_AGENTS = 3
+NR_AGENTS = 5
 ENV_CONFIG = get_ego_only_config(num_agents=NR_AGENTS)
 
 ENV_CONFIG["simulation_frequency"] = 15
 ENV_CONFIG["randomize_controlled_vehicles"] = False
 
-pprint.pprint(ENV_CONFIG)
 
-multi_rl_module = RLModule.from_checkpoint(
-    Path(CHECKPOINT_PATH)
-    / "learner_group"
-    / "learner"
-    / "rl_module"
-)
+model_or_policy, stack_type = load_policy_or_module(CHECKPOINT_PATH)
 
 
 RENDER_MODE = "human"
-ma_env = RLlibHighwayWrapper(config=ENV_CONFIG, env_id="customIntersection-env-v0", render_mode=RENDER_MODE, inference_mode=True)
+ma_env = create_eval_env(stack_type, ENV_CONFIG, "customIntersection-env-v0", render_mode=RENDER_MODE, inference_mode=True)
 
 
 
@@ -85,12 +66,15 @@ for ep in range(NUM_TEST_EPISODES):
     while not (done["__all__"] or truncated["__all__"]):
        
         
-        agents_actions = compute_actions(multi_rl_module, obs)
+        if stack_type == "new":
+            agents_actions = compute_actions(model_or_policy, obs)
+        else:
+            agents_actions = compute_actions_legacy(model_or_policy, obs)
         
        
         obs, reward, done, truncated, info = ma_env.step(agents_actions)
         # print(reward)
-        print(obs)
+    
         ep_reward += sum(reward.values())
 
         if RENDER_MODE != None:

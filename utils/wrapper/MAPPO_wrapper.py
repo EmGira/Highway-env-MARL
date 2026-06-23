@@ -6,8 +6,13 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from highway_env.envs.common.abstract import MultiAgentWrapper
 import numpy as np
 
-class RLlibHighwayWrapper(MultiAgentEnv):
-    """ Designed for standard multi-agent reinforcement learning (MARL) algorithms where each agent makes decisions using only its own local observation (e.g., Independent PPO, QMIX, etc.)."""
+class RLlibMAPPOHighwayWrapper(MultiAgentEnv):
+    """
+     Dedicated wrapper tailored specifically for Centralized Critic Multi-Agent PPO (MAPPO). 
+     It constructs and returns a combined global state alongside each agent's local observation. 
+     The centralized critic uses this global state to evaluate value functions during training, while actors use local observations to select actions during execution.
+    """
+
     def __init__(self, config, env_id, render_mode = None, inference_mode = False): 
         super().__init__()
         sa_env = gym.make(env_id, render_mode=render_mode, config=config) #"intersection-v1"
@@ -22,19 +27,13 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         else:
             self._agent_list = [f"agent_{i}" for i in range(config["controlled_vehicles"])]
 
-        
-            
         self._agent_ids = set(self._agent_list)
-
-
-        
         self.agents = self._agent_ids
         self.possible_agents = self._agent_ids
     
         # compute the observation space of a single agent
         original_obs_space = self.env.observation_space[0]
         if len(original_obs_space.shape) > 1:
-     
             flat_dim = int( np.prod(original_obs_space.shape) )
             single_agent_obs_space = gym.spaces.Box(
                 low=-np.inf, 
@@ -44,12 +43,26 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             )
         else:
             single_agent_obs_space = original_obs_space
+            flat_dim = original_obs_space.shape[0]
         
+        self.single_agent_obs_dim = flat_dim
         single_agent_action_space = self.env.action_space[0]
 
-        #turn obs_space and action_space into dictionary, wich is the format requested by RLlib for MA-envs
+        # Centralized Critic observation space
+        global_state_dim = flat_dim * len(self._agent_list)
+        global_state_space = gym.spaces.Box(
+            low=-np.inf, 
+            high=np.inf, 
+            shape=(global_state_dim,), 
+            dtype=np.float32
+        )
+
+        # Observation space is a Dictionary for MAPPO
         self.observation_space = gym.spaces.Dict({
-            agent_id: single_agent_obs_space
+            agent_id: gym.spaces.Dict({
+                "obs": single_agent_obs_space,
+                "global_state": global_state_space
+            })
             for agent_id in self._agent_list
         })
         self.action_space = gym.spaces.Dict({
@@ -57,14 +70,12 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             for agent_id in self._agent_list
         })
 
-        self._obs_space_in_preferred_format = True #TODOO try removing these
+        self._obs_space_in_preferred_format = True 
         self._action_space_in_preferred_format = True
-
-
 
     def _process_obs(self, agent_obs_matrix):
 
-
+        
         if self._is_absolute:
             return agent_obs_matrix.flatten().astype(np.float32)
 
@@ -81,7 +92,6 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         ego_vy = rel_obs[0, 4]
         ego_cos_h = rel_obs[0, 5]
         ego_sin_h = rel_obs[0, 6]
-
 
         # 3. TRANSLATION (relative space)
         #subtract position features to all present vehicles
@@ -104,7 +114,6 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         other_sin_d = rel_obs[present_mask, 8].copy()
        
         # Apply inverse rotation matrix
-        
         # rotated positions
         rel_obs[present_mask, 1] = dx * ego_cos_h + dy * ego_sin_h # x′ =xcos(θ)+ysin(θ)
         rel_obs[present_mask, 2] = -dx * ego_sin_h + dy * ego_cos_h # y′ =−xsin(θ)+ycos(θ)
@@ -114,8 +123,6 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         rel_obs[present_mask, 4] = -dvx * ego_sin_h + dvy * ego_cos_h
         
         # rotated heading
-        # cos(A - B) = cos(A)cos(B) + sin(A)sin(B)
-        # sin(A - B) = sin(A)cos(B) - cos(A)sin(B)
         rel_obs[present_mask, 5] = other_cos_h * ego_cos_h + other_sin_h * ego_sin_h
         rel_obs[present_mask, 6] = other_sin_h * ego_cos_h - other_cos_h * ego_sin_h
         rel_obs[present_mask, 7] = other_cos_d * ego_cos_h + other_sin_d * ego_sin_h
@@ -123,6 +130,22 @@ class RLlibHighwayWrapper(MultiAgentEnv):
 
         return rel_obs.flatten().astype(np.float32)
 
+    def _get_global_state(self, processed_obs_dict):
+
+
+        global_state_parts = []
+        for agent_id in self._agent_list:
+
+            if agent_id in processed_obs_dict:
+
+                global_state_parts.append(processed_obs_dict[agent_id])
+
+            else:
+
+                global_state_parts.append(np.zeros(self.single_agent_obs_dim, dtype=np.float32))
+
+
+        return np.concatenate(global_state_parts, axis=0)
 
     def reset(self, *, seed=None, options=None):
         self._terminated_agents = set()
@@ -136,20 +159,29 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         info_dict = {}
         is_info_iterable = isinstance(info, (list, tuple, np.ndarray))
 
+        processed_obs = {}
         for i, agent_id in enumerate(self._active_agents):
-            flat_obs[agent_id] = self._process_obs(obs[i])
+            processed_obs[agent_id] = self._process_obs(obs[i])
             info_dict[agent_id] = info[i] if is_info_iterable else info
 
-        
-        return flat_obs, info_dict
 
+        global_state = self._get_global_state(processed_obs)
+
+
+        for agent_id in self._active_agents:
+            flat_obs[agent_id] = {
+                "obs": processed_obs[agent_id],
+                "global_state": global_state
+            }
+        
+
+        return flat_obs, info_dict
 
     def step(self, action_dict):
         # Tracking agents that terminated
         if not hasattr(self, '_terminated_agents'):
             self._terminated_agents = set()
         
-    
         if not action_dict:
             raise ValueError("action_dict is empty or None!")
 
@@ -163,7 +195,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         
         actions = tuple(actions)
         
-        
+
         obs, rewards, dones, truncated, info = self.env.step(actions)
 
 
@@ -173,16 +205,18 @@ class RLlibHighwayWrapper(MultiAgentEnv):
         trunc_dict = {}
         info_dict = {}
         
-       
+
         is_trunc_iterable = isinstance(truncated, (list, tuple, np.ndarray))
         is_info_iterable = isinstance(info, (list, tuple, np.ndarray))
         
+
+        processed_obs = {}
         for i, agent_id in enumerate(self._active_agents):
             if agent_id not in self._terminated_agents:   
-            
 
-                obs_dict[agent_id] = self._process_obs(obs[i])
-    
+
+                processed_obs[agent_id] = self._process_obs(obs[i])
+
 
                 rew_dict[agent_id] = rewards[i]
                 term_dict[agent_id] = dones[i]
@@ -190,18 +224,25 @@ class RLlibHighwayWrapper(MultiAgentEnv):
                 
                 agent_truncated = truncated[i] if is_trunc_iterable else truncated
                 trunc_dict[agent_id] = agent_truncated
-                
+
                 info_dict[agent_id] = info[i] if is_info_iterable else info
 
-           
+
                 agent_done = dones[i]
-                
-                
+
+
                 if agent_done or agent_truncated:
                     self._terminated_agents.add(agent_id)
         
+
+        global_state = self._get_global_state(processed_obs)
+        for agent_id in processed_obs:
+            obs_dict[agent_id] = {
+                "obs": processed_obs[agent_id],
+                "global_state": global_state
+            }
+
         #episoded end only when all agents are terminated
-        
         is_all_done = len(self._terminated_agents) == len(self._active_agents)
         
         if self.inference_mode == True:
@@ -216,16 +257,11 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             
         return obs_dict, rew_dict, term_dict, trunc_dict, info_dict
 
-
     def render(self):
         return self.env.render()
-
     
     def close(self):
         if hasattr(self.env, 'close'):
             self.env.close()
         if hasattr(super(), 'close'):
             super().close()
-
-
-

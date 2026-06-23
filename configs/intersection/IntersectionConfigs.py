@@ -148,7 +148,7 @@ def get_improved_Simple_config(num_agents=2, obs_type="Kinematics"):
 
 
 
-def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
+def get_ego_only_config(num_agents=3, obs_type="Kinematics"):
     return {
         "observation": { 
             "type": "MultiAgentObservation",

@@ -1,14 +1,3 @@
-    # config B = 
-    #     ["spawn_points"] = ["3", "1"]
-    #     ["multi_destinations"] = ["o0", "o3"]
-    
-    # config A (default) = 
-    #     ["spawn_points"] = ["0", "1"]
-    #     ["multi_destinations"] = ["o1", "o0"]
-
-    # config C =
-    #      ["spawn_points"] = ["2", "1"] 
-    #      ["multi_destinations"] = ["o3", "o3"] 
 
 import sys
 import os
@@ -21,65 +10,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config
+from configs.intersection.IntersectionConfigs import get_improved_Simple_config
 
 ray.init(ignore_reinit_error=True)
 
 
-def compute_actions(multi_rl_module, obs):
-
-    policy_module = multi_rl_module["shared_policy"]
-
-    with torch.no_grad():
-        agents_actions = {}
-        for agent_id, agent_obs in obs.items():
-       
-            ao = torch.from_numpy(agent_obs).float().unsqueeze(0)
-            output = policy_module.forward_inference({"obs": ao})
-            agents_actions[agent_id] = torch.argmax(output["action_dist_inputs"], dim=1).item()
-
-    return agents_actions
-
-def compute_continous_actions(multi_rl_module, obs, env_agent_ids):
-    policy_module = multi_rl_module["shared_policy"]
-
-    with torch.no_grad():
-        agents_actions = {}
-        
-        for agent_id in env_agent_ids:
-            
-            if agent_id in obs:
-   
-                agent_obs = obs[agent_id]
-                ao = torch.from_numpy(agent_obs).float().unsqueeze(0)
-                output = policy_module.forward_inference({"obs": ao})
-                
-                action_dist_params = output["action_dist_inputs"][0].cpu().numpy()
-                
-                greedy_action = np.clip(
-                    action_dist_params[0:1], 
-                    a_min=-1.0,
-                    a_max=1.0,
-                )
-                agents_actions[agent_id] = greedy_action
-                
-            else:
-                agents_actions[agent_id] = np.array([0.0], dtype=np.float32)
-                
-    return agents_actions
-
+from utils.evaluation_utils import load_policy_or_module, create_eval_env, compute_actions, compute_actions_legacy
 
 @ray.remote(num_cpus=1)
 def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
-    import torch
-    from ray.rllib.core.rl_module import MultiRLModule
-    from pathlib import Path
-    from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
- 
-    multi_rl_module = MultiRLModule.from_checkpoint(
-        Path(checkpoint_path) / "learner_group" / "learner" / "rl_module"
-    )
-    env = RLlibHighwayWrapper(config=env_config, env_id="customIntersection-env-v0", render_mode=None)
+    model_or_policy, stack_type = load_policy_or_module(checkpoint_path)
+    env = create_eval_env(stack_type, env_config, "customIntersection-env-v0", render_mode=None, inference_mode=False)
 
     worker_history = {
         "rewards": [],
@@ -90,19 +31,24 @@ def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
     for ep in range(num_episodes):
         obs, info = env.reset()
         all_agent_ids = list(obs.keys())
+        num_agents = len(all_agent_ids)
         terminated = {"__all__": False}
         truncated = {"__all__": False}
         ep_reward = 0
 
         while not (terminated["__all__"] or truncated["__all__"]):
-            
-            agents_actions = compute_actions(multi_rl_module, obs)
+            if stack_type == "new":
+                agents_actions = compute_actions(model_or_policy, obs)
+            else:
+                agents_actions = compute_actions_legacy(model_or_policy, obs, explore=False)
 
             obs, reward, terminated, truncated, info = env.step(agents_actions)
             ep_reward += sum(reward.values()) 
 
+        normalized_ep_reward = ep_reward / num_agents if num_agents > 0 else 0.0
+        worker_history["rewards"].append(normalized_ep_reward)
+
         last_info = list(info.values())[0] if info else {}
-        worker_history["rewards"].append(ep_reward)
         worker_history["crashes"].append(1 if last_info.get('crashed', False) else 0)
         worker_history["successes"].append(1 if last_info.get('all_arrived', False) else 0)
         
@@ -269,7 +215,7 @@ def plot_comparison(results):
     axs[0].set_title('Reward Distribution per Configuration', fontsize=14)
     axs[0].set_ylabel('Episode Return', fontsize=12)
     axs[0].grid(True, linestyle='--', alpha=0.4, axis='y')
-    # Ruotiamo le etichette per non farle accavallare
+
     axs[0].tick_params(axis='x', rotation=45) 
 
     
