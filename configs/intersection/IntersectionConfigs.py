@@ -148,7 +148,7 @@ def get_improved_Simple_config(num_agents=2, obs_type="Kinematics"):
 
 
 
-def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
+def get_ego_only_config(num_agents=3, obs_type="Kinematics"):
     return {
         "observation": { 
             "type": "MultiAgentObservation",
@@ -188,8 +188,8 @@ def get_ego_only_config(num_agents=4, obs_type="Kinematics"):
         "collision_reward": -50, 
         "arrived_reward": 50, 
 
-        "high_speed_reward": 0.5,
-        "reward_speed_range": [0, 6],
+        # "high_speed_reward": 0.5,
+        # "reward_speed_range": [0, 6],
         
         
         "offroad_terminal": False,

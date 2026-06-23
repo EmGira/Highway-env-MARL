@@ -7,28 +7,41 @@ import os
 parent_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_folder)
 
-from utils.wrapper.MA_wrapper import RLlibHighwayWrapper
-from utils.callbacks.Callbacks import CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback
-from configs.intersection.IntersectionConfigs import get_simple_multi_agent_config, get_improved_Simple_config, get_ego_only_config
+from utils.models.CentralizedCriticModel import CentralizedCriticModel
+from utils.wrapper.MAPPO_wrapper import RLlibMAPPOHighwayWrapper
+from utils.callbacks.MAPPO_callbacks import MAPPOCrashLoggerCallback, MAPPOFixAdamBetasCallback, MAPPOSafeEvaluationCallback
+from configs.intersection.IntersectionConfigs import get_ego_only_config
 import highway_env
+
+
 
 import ray
 from ray import shutdown
 from ray import tune
 from ray.tune import RunConfig, CheckpointConfig, FailureConfig
-from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
+from ray.rllib.models import ModelCatalog
 
-
-from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.ppo import PPOConfig, PPO
+from ray.rllib.algorithms.callbacks import make_multi_callbacks
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.optuna import OptunaSearch
 
 from optuna.storages import RDBStorage
 
+
 from pathlib import Path
 import datetime
-
 import argparse
+
+# Register IPPO and MAPPO trainables so they are recognized by Ray Tune
+
+tune.register_trainable("MAPPO", PPO)
+
+import gymnasium as gym
+
+# Register the custom model with RLlib ModelCatalog
+ModelCatalog.register_custom_model("centralized_critic_model", CentralizedCriticModel)
+
 
 def initialize():
         
@@ -75,8 +88,7 @@ if __name__ == "__main__":
     ENV_CONFIG = get_ego_only_config(6)
     ENV_CONFIG["randomize_controlled_vehicles"] = False
     
-    
-    tune.register_env("CustomIntersection-env-v0", lambda config: RLlibHighwayWrapper(config, "customIntersection-env-v0")) #
+    tune.register_env("CustomIntersection-env-v0", lambda config: RLlibMAPPOHighwayWrapper(config, "customIntersection-env-v0")) #
 
 
     config = (
@@ -86,6 +98,10 @@ if __name__ == "__main__":
             env_config = ENV_CONFIG
         )
         .framework("torch")
+        .api_stack(
+            enable_rl_module_and_learner=False,
+            enable_env_runner_and_connector_v2=False,
+        )
         .env_runners(
             num_env_runners=6,  
             num_envs_per_env_runner=1,
@@ -112,18 +128,21 @@ if __name__ == "__main__":
             #lr = [[0, 3e-4], [10000000, 1e-5]],
             lr=3e-4, #3e-4
             
-
             gamma = 0.975, #before: 0.95
+
+
             use_critic = True,           
             use_gae = True,               
             lambda_ = 0.95,
             vf_loss_coeff = 0.5,    # 0.5
             kl_target = 0.02,     
 
-            #policy and value function dont share weights
+            # Use the registered custom model for MAPPO
             model={
-            "vf_share_layers": False,
-            "fcnet_hiddens":  [256, 256] #[256, 256],
+                "custom_model": "centralized_critic_model",
+                "custom_model_config": {
+                    "fcnet_hiddens": [256, 256],
+                }
             }  
             
         )
@@ -136,13 +155,13 @@ if __name__ == "__main__":
             policies={"shared_policy"}, 
             policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy",
         )
-        .callbacks([CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback] )
+        .callbacks(make_multi_callbacks([MAPPOCrashLoggerCallback, MAPPOFixAdamBetasCallback, MAPPOSafeEvaluationCallback]))
 
     )
 
     run_config = RunConfig(
 
-        name=f"PPO_{nr_of_subdirectories}",
+        name=f"MAPPO_{nr_of_subdirectories}",
 
         storage_path=os.path.abspath(checkpoints_dir),
         
@@ -168,7 +187,7 @@ if __name__ == "__main__":
     scheduler = None
     if args.enable_optuna:
         optuna_storage = RDBStorage(url="sqlite:///optuna_highway_results.db")
-        study_name = f"PPO_Study_{today.strftime('%Y-%m-%d')}_Run_{nr_of_subdirectories}"
+        study_name = f"MAPPO_Study_{today.strftime('%Y-%m-%d')}_Run_{nr_of_subdirectories}"
         algo = OptunaSearch(
             storage=optuna_storage,
             study_name=study_name,
@@ -185,7 +204,7 @@ if __name__ == "__main__":
         print(f"\n@@@ Resuming training from {args.resume}...")
         tuner = tune.Tuner.restore(   
             path=os.path.abspath(args.resume), 
-            trainable="PPO",
+            trainable="MAPPO",
             resume_unfinished=True,
             resume_errored=True,
             
@@ -193,7 +212,7 @@ if __name__ == "__main__":
     else:
         print("\n@@@ Initializing NEW training...")
         tuner = tune.Tuner(
-            "PPO",
+            "MAPPO",
             tune_config=tune.TuneConfig(
                 metric=run_config.checkpoint_config.checkpoint_score_attribute, 
                 mode=run_config.checkpoint_config.checkpoint_score_order,
