@@ -6,9 +6,9 @@ from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from highway_env.envs.common.abstract import MultiAgentWrapper
 import numpy as np
 
-class RLlibMAPPOHighwayWrapper(MultiAgentEnv):
+class RLlibMASACHighwayWrapper(MultiAgentEnv):
     """
-     Dedicated wrapper tailored specifically for Centralized Critic Multi-Agent PPO (MAPPO). 
+     Dedicated wrapper tailored specifically for Centralized Critic Multi-Agent PPO (MASAC). 
      It constructs and returns a combined global state alongside each agent's local observation. 
      The centralized critic uses this global state to evaluate value functions during training, while actors use local observations to select actions during execution.
     """
@@ -58,7 +58,7 @@ class RLlibMAPPOHighwayWrapper(MultiAgentEnv):
             dtype=np.float32
         )
 
-        # Observation space is a Dictionary for MAPPO
+        # Observation space is a Dictionary for MASAC
         self.observation_space = gym.spaces.Dict({
             agent_id: gym.spaces.Dict({
                 "obs": single_agent_obs_space,

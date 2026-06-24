@@ -80,12 +80,26 @@ class MAPPOSafeEvaluationCallback(DefaultCallbacks):
 class MAPPOFixAdamBetasCallback(DefaultCallbacks):
     """Fix for Adam betas tensor issue when loading checkpoints."""
     def on_checkpoint_loaded(self, *, algorithm, **kwargs) -> None:
-        def betas_tensor_to_float(learner):
-            for param_grp_key in learner._optimizer_parameters.keys():
-                param_grp = param_grp_key.param_groups[0]
-                param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+      
+        if hasattr(algorithm, "learner_group") and algorithm.learner_group is not None:
+            def betas_tensor_to_float(learner):
+                for param_grp_key in learner._optimizer_parameters.keys():
+                    param_grp = param_grp_key.param_groups[0]
+                    if "betas" in param_grp and isinstance(param_grp["betas"][0], Tensor):
+                        param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
+                        
+            algorithm.learner_group.foreach_learner(betas_tensor_to_float)
+            
+    
+        elif hasattr(algorithm, "workers") and algorithm.workers is not None:
+            local_worker = algorithm.workers.local_worker()
+            if hasattr(local_worker, "get_policies"):
+                policies = local_worker.get_policies()
+                for policy in policies.values():
+         
+                    if hasattr(policy, "_optimizers"):
+                        for opt in policy._optimizers:
+                            for param_grp in opt.param_groups:
+                                if "betas" in param_grp and isinstance(param_grp["betas"][0], Tensor):
+                                    param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
 
-                if "betas" in param_grp and isinstance(param_grp["betas"][0], Tensor):
-                    param_grp["betas"] = tuple(beta.item() for beta in param_grp["betas"])
-                    
-        algorithm.learner_group.foreach_learner(betas_tensor_to_float)

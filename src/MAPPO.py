@@ -33,13 +33,12 @@ from pathlib import Path
 import datetime
 import argparse
 
-# Register IPPO and MAPPO trainables so they are recognized by Ray Tune
+
 
 tune.register_trainable("MAPPO", PPO)
 
 import gymnasium as gym
 
-# Register the custom model with RLlib ModelCatalog
 ModelCatalog.register_custom_model("centralized_critic_model", CentralizedCriticModel)
 
 

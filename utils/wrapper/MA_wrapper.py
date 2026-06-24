@@ -10,6 +10,7 @@ class RLlibHighwayWrapper(MultiAgentEnv):
     """ Designed for standard multi-agent reinforcement learning (MARL) algorithms where each agent makes decisions using only its own local observation (e.g., Independent PPO, QMIX, etc.)."""
     def __init__(self, config, env_id, render_mode = None, inference_mode = False): 
         super().__init__()
+        self.render_mode = render_mode
         sa_env = gym.make(env_id, render_mode=render_mode, config=config) #"intersection-v1"
         self.env = MultiAgentWrapper(sa_env)
         self.inference_mode = inference_mode
@@ -226,6 +227,9 @@ class RLlibHighwayWrapper(MultiAgentEnv):
             self.env.close()
         if hasattr(super(), 'close'):
             super().close()
+
+    def set_record_video_wrapper(self, wrapper):
+        self.env.unwrapped.set_record_video_wrapper(wrapper)
 
 
 

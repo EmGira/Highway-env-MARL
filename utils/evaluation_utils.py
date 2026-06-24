@@ -10,6 +10,10 @@ def load_policy_or_module(checkpoint_path):
     """Loads either a MultiRLModule (New API Stack) or Policy (Old API Stack) from a checkpoint path."""
 
     from utils.models.CentralizedCriticModel import CentralizedCriticModel
+    from ray.rllib.models import ModelCatalog
+    
+    
+    ModelCatalog.register_custom_model("centralized_critic_model", CentralizedCriticModel)
     
     new_stack_path = Path(checkpoint_path) / "learner_group" / "learner" / "rl_module"
     if new_stack_path.exists():
