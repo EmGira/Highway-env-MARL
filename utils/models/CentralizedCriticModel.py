@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 
-import gym
+import gymnasium as gym
 
 class CentralizedCriticModel(TorchModelV2, nn.Module):
     """Custom model implementing Centralized Training and Decentralized Execution (MAPPO).

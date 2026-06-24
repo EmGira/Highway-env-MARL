@@ -154,7 +154,7 @@ def get_ego_only_config(num_agents=3, obs_type="Kinematics"):
             "type": "MultiAgentObservation",
             "observation_config": { 
                 "type": obs_type,
-                "vehicles_count": 6, #8
+                "vehicles_count": 3, #8
                 "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h", "cos_d", "sin_d"],
                 "features_range": {
                     "x": [-100, 100],
@@ -218,6 +218,8 @@ def get_ego_only_config(num_agents=3, obs_type="Kinematics"):
         "screen_height": 1200,
         "centering_position": [0.5, 0.6],
         "scaling": 5.5 * 1.3,
+        "simulation_frequency": 15,
+        "policy_frequency": 1,
 
         #Destinations and spawn points
         "destination": None,

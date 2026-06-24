@@ -23,8 +23,16 @@ from configs.intersection.IntersectionConfigs import get_simple_multi_agent_conf
 
 from utils.evaluation_utils import load_policy_or_module, create_eval_env, compute_actions_stochastic, compute_actions_stochastic_legacy, compute_actions, compute_actions_legacy
 
+from utils.models.CentralizedCriticModel import CentralizedCriticModel
+from ray.rllib.models import ModelCatalog
+
+
+ModelCatalog.register_custom_model("centralized_critic_model", CentralizedCriticModel)
+
+
+
 CHECKPOINT_PATH = os.path.abspath(
-    "./A-checkpoints/TEST/MAPPO3agenti/MAPPO_2/ID_a2e6e_00000/checkpoint_000005"
+    "./A-checkpoints/TEST/3agents-MAPPO/MAPPO_2/ID_a2e6e_00000/checkpoint_000005"
     )  
 
 
@@ -38,7 +46,7 @@ ENV_CONFIG["randomize_controlled_vehicles"] = False
 model_or_policy, stack_type = load_policy_or_module(CHECKPOINT_PATH)
 
 
-RENDER_MODE = "human"
+RENDER_MODE = None #"human"
 ma_env = create_eval_env(stack_type, ENV_CONFIG, "customIntersection-env-v0", render_mode=RENDER_MODE, inference_mode=True)
 
 
