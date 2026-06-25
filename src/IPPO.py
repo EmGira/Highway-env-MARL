@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     nr_of_subdirectories, checkpoints_dir, today = initialize()
 
-    ENV_CONFIG = get_ego_only_config(6)
+    ENV_CONFIG = get_ego_only_config(3)
     ENV_CONFIG["randomize_controlled_vehicles"] = False
     
     
@@ -144,9 +144,10 @@ if __name__ == "__main__":
     if args.seed is not None:
         config = config.debugging(seed=args.seed)
 
+    run_name = f"IPPO_seed_{args.seed}" if args.seed is not None else f"IPPO_{nr_of_subdirectories}"
     run_config = RunConfig(
 
-        name=f"IPPO_{nr_of_subdirectories}",
+        name=run_name,
 
         storage_path=os.path.abspath(checkpoints_dir),
         
