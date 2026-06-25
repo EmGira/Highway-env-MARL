@@ -104,7 +104,7 @@ if __name__ == "__main__":
             num_env_runners=6,  
             num_envs_per_env_runner=1,
             sample_timeout_s=200.0,
-            rollout_fragment_length="auto",  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
+            rollout_fragment_length=100,  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
         )
         .evaluation(
             evaluation_num_env_runners=0,
@@ -116,7 +116,7 @@ if __name__ == "__main__":
         .training( 
             
             gamma = 0.975,
-            train_batch_size_per_learner=512,
+            train_batch_size_per_learner=2048,
         
             actor_lr=1e-4,
             critic_lr=3e-4,
@@ -138,17 +138,16 @@ if __name__ == "__main__":
                 "prioritized_replay_alpha": 0.6, 
                 "prioritized_replay_beta": 0.4, 
                 "prioritized_replay_eps": 1e-6,
-                "capacity": 1000000, 
+                "capacity": 500000, 
             },
             
             
-           
             num_steps_sampled_before_learning_starts=20000, 
-            target_entropy=0.2,
+            target_entropy="auto",
 
             initial_alpha=0.1,
             target_network_update_freq=0,
-            tau=0.001, 
+            tau=0.005, 
             
             twin_q=True, 
             grad_clip=1.0, 

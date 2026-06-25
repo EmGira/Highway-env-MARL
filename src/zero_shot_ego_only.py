@@ -11,9 +11,10 @@ import torch
 
 from configs.intersection.IntersectionConfigs import get_improved_Simple_config, get_ego_only_config
 
-ray.init(ignore_reinit_error=True)
-
 from utils.evaluation_utils import load_policy_or_module, create_eval_env, compute_actions, compute_actions_legacy
+
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 @ray.remote(num_cpus=1)
@@ -89,55 +90,41 @@ def run_distributed_evaluation(policy_name, checkpoint_path, env_config, total_e
     
     return aggregated_history, mean_reward, std_reward
 
-def compute_duration(nAgents):
-    if(nAgents <=    4):
-        return 60
-    else:
-        return 60 + 10*nAgents
+
+
+def collect_data(output_dir):
+    import json
+    ray.init(ignore_reinit_error=True)
+    results = []
+    for scenario in scenarios:
+        history, mean, std = run_distributed_evaluation(
+            scenario["name"], scenario["checkpoint"], scenario["config"], NUM_TEST_EPISODES, NUM_WORKERS
+        )
+        results.append({
+            "name": scenario["name"],
+            "history": history,
+            "mean": float(mean),
+            "std": float(std)
+        })
     
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, "results.json"), "w") as f:
+        json.dump(results, f, indent=4)
+        
+    ray.shutdown()
+    print(f"Data saved to {os.path.join(output_dir, 'results.json')}")
 
 
-MAX_NR_AGENTS = 8
-NUM_TEST_EPISODES = 200
-NUM_WORKERS = 7 
+def plot_comparison(output_dir):
+    import json
+    data_path = os.path.join(output_dir, "results.json")
+    if not os.path.exists(data_path):
+        print(f"Data file not found at {data_path}. Run with --collect first.")
+        return
+        
+    with open(data_path, "r") as f:
+        results = json.load(f)
 
-ENV_ID = "customIntersection-env-v0"
-
-def get_base_config():
-    config = get_ego_only_config(3)
-    config["simulation_frequency"] = 15
-    config["randomize_controlled_vehicles"] = False
-    return config
-
-
-checkpoint = "./A-checkpoints/TEST/3agenti/PPO_0/ID_4cd2d_00000/checkpoint_000005"
-
-scenarios = [
-    {
-        "name": f"{nAgents} agents",
-        "checkpoint": os.path.abspath(checkpoint),
-        "config": {**get_base_config(), "controlled_vehicles" : nAgents } 
-    }   for nAgents in range(3, MAX_NR_AGENTS+1)
- 
-]
-
-results = []
-for scenario in scenarios:
-    history, mean, std = run_distributed_evaluation(
-        scenario["name"], scenario["checkpoint"], scenario["config"], NUM_TEST_EPISODES, NUM_WORKERS
-    )
-    results.append({
-        "name": scenario["name"],
-        "history": history,
-        "mean": mean,
-        "std": std
-    })
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-def plot_comparison(results):
     if not results:
         return
         
@@ -160,7 +147,7 @@ def plot_comparison(results):
     crash_rates = [(sum(res["history"]["crashes"]) / num_episodes) * 100 for res in results_sorted]
    
     fig, axs = plt.subplots(2, 1, figsize=(12, 12))
-    fig.suptitle('Zero-Shot Generalization Comparison', fontsize=18, fontweight='bold')
+    fig.suptitle('Zero-Shot Generalization - Intersection', fontsize=18, fontweight='bold')
 
 
 
@@ -188,7 +175,7 @@ def plot_comparison(results):
     rects1 = axs[1].bar(x - width/2, success_rates, width, label='Success Rate', color='forestgreen', alpha=0.8)
     rects2 = axs[1].bar(x + width/2, crash_rates, width, label='Crash Rate', color='crimson', alpha=0.8)
 
-    axs[1].set_title('Final Evaluation Metrics (200 Episodes)', fontsize=14)
+    axs[1].set_title(f'Final Evaluation Metrics ({NUM_TEST_EPISODES} Episodes)', fontsize=14)
     axs[1].set_ylabel('Percentage (%)', fontsize=12)
     axs[1].set_xticks(x)
     axs[1].set_xticklabels(labels, rotation=45, ha='right') 
@@ -204,10 +191,59 @@ def plot_comparison(results):
     plt.tight_layout()
     plt.subplots_adjust(top=0.92) 
     
-    plt.savefig("ZSG.svg", format="svg")
+    os.makedirs(output_dir, exist_ok=True)
+    plt.savefig(os.path.join(output_dir, "ZSG.svg"), format="svg")
     plt.show()
 
 
-plot_comparison(results)
 
-ray.shutdown()
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Zero-Shot Generalization Evaluation")
+    parser.add_argument("--collect", action="store_true", help="Run evaluation and collect data")
+    parser.add_argument("--plot", action="store_true", help="Plot previously collected data")
+    parser.add_argument("--output_dir", type=str, default="./data_zero_shot", help="Directory to save/load data")
+    
+    args = parser.parse_args()
+    
+
+    
+
+    MAX_NR_AGENTS = 8
+    NUM_TEST_EPISODES = 200
+    NUM_WORKERS = 7 
+
+    ENV_ID = "customIntersection-env-v0"
+
+    def get_base_config():
+        config = get_ego_only_config(3)
+        config["simulation_frequency"] = 15
+        config["randomize_controlled_vehicles"] = False
+        return config
+
+    #./A-checkpoints/TEST/3agents-MAPPO/MAPPO_2/ID_a2e6e_00000/checkpoint_000005
+    #./A-checkpoints/TEST/3agents-IPPO/PPO_0/ID_4cd2d_00000/checkpoint_000005
+    checkpoint = "./A-checkpoints/TEST/3agents-IPPO/PPO_0/ID_4cd2d_00000/checkpoint_000005"
+
+    scenarios = [
+        {
+            "name": f"{nAgents} agents",
+            "checkpoint": os.path.abspath(checkpoint),
+            "config": {**get_base_config(), "controlled_vehicles" : nAgents } 
+        }   for nAgents in range(3, MAX_NR_AGENTS+1)
+    
+    ]
+
+
+    if not args.collect and not args.plot:
+        print("Please specify --collect to gather data or --plot to create graphs.")
+        parser.print_help()
+    
+    if args.collect:
+        collect_data(args.output_dir)
+        
+    if args.plot:
+        plot_comparison(args.output_dir)
+
