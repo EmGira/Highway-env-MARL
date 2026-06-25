@@ -50,7 +50,7 @@ class Helper:
         return smoothed
 
     @staticmethod
-    def load_runs(paths, target_metrics=["return"]):
+    def load_runs(paths, target_metrics=["return"], max_iterations=None):
         runs_dict = {}
 
         for path in paths:
@@ -100,6 +100,12 @@ class Helper:
                         candidates = ['ray/tune/learners/shared_policy/policy_loss', 'ray/tune/info/learner/shared_policy/learner_stats/policy_loss']
                     elif tm == "entropy":
                         candidates = ['ray/tune/learners/shared_policy/entropy', 'ray/tune/info/learner/shared_policy/learner_stats/entropy']
+                    elif tm == "actor_loss":
+                        candidates = ['ray/tune/info/learner/shared_policy/learner_stats/actor_loss']
+                    elif tm == "alpha_loss":
+                        candidates = ['ray/tune/info/learner/shared_policy/learner_stats/alpha_loss']
+                    elif tm == "critic_loss":
+                        candidates = ['ray/tune/info/learner/shared_policy/learner_stats/critic_loss']
                     else:
                         candidates = [tm]
 
@@ -114,7 +120,7 @@ class Helper:
                         metric_data = ea.Scalars(curr_metric_key)
                         metric_dict = {m.step: m.value for m in metric_data}
 
-                        #this correctly stiches data from two .tfevents, when a run has been stopped and resumed
+                        #stiches data from two .tfevents, when a run has been stopped and resumed
                         for iteration, val in metric_dict.items():
                             if iteration in step_dict:
                                 if iteration not in data_by_step:
@@ -139,10 +145,14 @@ class Helper:
                         metrics_arrays[tm].append(round(float(val), 4))
 
 
-            runs_dict[path]['num_samples'] = num_samples[:100]
-
-            for tm in target_metrics:
-                runs_dict[path][tm] = metrics_arrays[tm][:100]
+            if max_iterations is not None:
+                runs_dict[path]['num_samples'] = num_samples[:max_iterations]
+                for tm in target_metrics:
+                    runs_dict[path][tm] = metrics_arrays[tm][:max_iterations]
+            else:
+                runs_dict[path]['num_samples'] = num_samples
+                for tm in target_metrics:
+                    runs_dict[path][tm] = metrics_arrays[tm]
 
 
         return runs_dict
@@ -169,27 +179,43 @@ class Helper:
 
 
 if __name__ == "__main__":
-        
-    files = ['./A-checkpoints/TEST/6agents-MAPPO/MAPPO_0/ID_8fee6_00000', './A-checkpoints/TEST/6agents-IPPO/IPPO_0/ID_56159_00000']
-    labels = ['MAPPO', 'IPPO']
-
-
-    TARGET_METRICS = ["return", "vf_loss", "entropy"]
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--runs", nargs="+", default=['./A-checkpoints/TEST/6agents-MAPPO/MAPPO_0/ID_8fee6_00000', './A-checkpoints/TEST/6agents-IPPO/IPPO_0/ID_56159_00000'], help="Paths to run folders")
+    parser.add_argument("--labels", nargs="+", default=['MAPPO', 'IPPO'], help="Labels for the runs")
+    parser.add_argument("--max_iters", type=int, default=100, help="Max iterations to plot (default 100). Use 0 for unlimited.")
+    parser.add_argument("--metrics", nargs="+", default=["return", "vf_loss", "entropy"], help="Metrics to plot")
+    parser.add_argument("--output", type=str, default="temp.svg", help="Output file name")
+    parser.add_argument("--title", type=str, default='Multi-Agent Highway Intersection', help="Title of the plot")
+    args = parser.parse_args()
     
-    runs_dict = Helper.load_runs(files, target_metrics=TARGET_METRICS)
+    files = args.runs
+    labels = args.labels
+    max_iters = None if args.max_iters <= 0 else args.max_iters
+
+    TARGET_METRICS = args.metrics
+    
+    runs_dict = Helper.load_runs(files, target_metrics=TARGET_METRICS, max_iterations=max_iters)
     
     n_metrics = len(TARGET_METRICS)
-    fig, axes = plt.subplots(n_metrics, 1, figsize=(10, 5 * n_metrics))
     
-    if n_metrics == 1:
-        axes = [axes]
+    
+    if n_metrics == 4:
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        axes = axes.flatten()
+    else:
+        fig, axes = plt.subplots(n_metrics, 1, figsize=(10, 5 * n_metrics))
+        if n_metrics == 1:
+            axes = [axes]
 
-   
     formal_names = {
         "return": "Average Episode Return",
         "vf_loss": "Value Function Loss",
         "policy_loss": "Policy Loss",
-        "entropy": "Policy Entropy"
+        "entropy": "Policy Entropy",
+        "actor_loss": "Actor Loss",
+        "alpha_loss": "Alpha Loss",
+        "critic_loss": "Critic Loss"
     }
 
     for i, tm in enumerate(TARGET_METRICS):
@@ -197,8 +223,9 @@ if __name__ == "__main__":
         
         formal_ylabel = formal_names.get(tm, tm.capitalize())
         
-        
-        x_label = 'Environment Steps (Millions)' if i == len(TARGET_METRICS) - 1 else ''
+        # Adjust x_label based on layout
+        is_bottom_row = (n_metrics != 4 and i == n_metrics - 1) or (n_metrics == 4 and i >= 2)
+        x_label = 'Environment Steps (Millions)' if is_bottom_row else ''
         
         for path, label in zip(files, labels):  
             Helper.my_plotter(ax, 
@@ -211,7 +238,8 @@ if __name__ == "__main__":
         ax.set_title(f'{formal_ylabel} Over Training', pad=10)
 
   
-    fig.suptitle('Multi-Agent Highway Intersection (3 Agents)', fontsize=16, fontweight='bold', y=0.98)
+    fig.suptitle(args.title, fontsize=16, fontweight='bold', y=0.98)
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.savefig("temp.svg", format="svg")
+    plt.savefig(args.output, format="svg")
+    print(f"Saved plot to {args.output}")
