@@ -65,6 +65,8 @@ if __name__ == "__main__":
     parser.add_argument("--resume", type=str, default=None, help="Path to the Run Folder from wich we want to resume training")
     parser.add_argument("--enable_scheduler", action="store_true", help="Enables the ASHA scheduler for early stopping")
     parser.add_argument("--enable_optuna", action="store_true", help="Enables Optuna for HyperParam search")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument("--iterations", type=int, default=200, help="Number of training iterations")
     args = parser.parse_args()
 
 
@@ -136,8 +138,11 @@ if __name__ == "__main__":
             policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy",
         )
         .callbacks([CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback] )
-
+        
     )
+
+    if args.seed is not None:
+        config = config.debugging(seed=args.seed)
 
     run_config = RunConfig(
 
@@ -145,7 +150,7 @@ if __name__ == "__main__":
 
         storage_path=os.path.abspath(checkpoints_dir),
         
-        stop={"training_iteration": 200},
+        stop={"training_iteration": args.iterations},
 
         
         failure_config=FailureConfig(
