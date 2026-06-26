@@ -23,11 +23,14 @@ from configs.intersection.IntersectionConfigs import get_simple_multi_agent_conf
 
 from utils.evaluation_utils import load_policy_or_module, create_eval_env, compute_actions_stochastic, compute_actions_stochastic_legacy, compute_actions, compute_actions_legacy
 
-from utils.models.CentralizedCriticModel import CentralizedCriticModel
+from src.models.CentralizedCriticModel import CentralizedCriticModel
+from src.models.CentralizedCriticSACModel import CentralizedCriticSACModel
+
 from ray.rllib.models import ModelCatalog
 
 
 ModelCatalog.register_custom_model("centralized_critic_model", CentralizedCriticModel)
+ModelCatalog.register_custom_model("centralized_critic_sac_model", CentralizedCriticSACModel)
 
 
 
@@ -36,7 +39,7 @@ CHECKPOINT_PATH = os.path.abspath(
     )  
 
 
-NR_AGENTS = 5
+NR_AGENTS = 3
 ENV_CONFIG = get_ego_only_config(num_agents=NR_AGENTS)
 
 ENV_CONFIG["simulation_frequency"] = 15
@@ -46,8 +49,8 @@ ENV_CONFIG["randomize_controlled_vehicles"] = False
 model_or_policy, stack_type = load_policy_or_module(CHECKPOINT_PATH)
 
 
-RENDER_MODE = None #"human"
-ma_env = create_eval_env(stack_type, ENV_CONFIG, "customIntersection-env-v0", render_mode=RENDER_MODE, inference_mode=True)
+RENDER_MODE = "human"
+ma_env = create_eval_env(stack_type, ENV_CONFIG, "customRoundabout-env-v0", render_mode=RENDER_MODE, inference_mode=True)
 
 
 

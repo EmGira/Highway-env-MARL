@@ -7,7 +7,7 @@ import os
 parent_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_folder)
 
-from utils.models.CentralizedCriticSACModel import CentralizedCriticSACModel
+from src.models.CentralizedCriticSACModel import CentralizedCriticSACModel
 from utils.wrapper.MASAC_wrapper import RLlibMASACHighwayWrapper
 from utils.callbacks.MAPPO_callbacks import MAPPOCrashLoggerCallback, MAPPOFixAdamBetasCallback, MAPPOSafeEvaluationCallback
 from configs.intersection.IntersectionConfigs import get_ego_only_config

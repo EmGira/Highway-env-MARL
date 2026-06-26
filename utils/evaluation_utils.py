@@ -9,7 +9,7 @@ from ray.rllib.policy.policy import Policy
 def load_policy_or_module(checkpoint_path):
     """Loads either a MultiRLModule (New API Stack) or Policy (Old API Stack) from a checkpoint path."""
 
-    from utils.models.CentralizedCriticModel import CentralizedCriticModel
+    from src.models.CentralizedCriticModel import CentralizedCriticModel
     from ray.rllib.models import ModelCatalog
     
     
