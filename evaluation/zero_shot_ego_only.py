@@ -18,18 +18,24 @@ import matplotlib.pyplot as plt
 
 
 @ray.remote(num_cpus=1)
-def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
+def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes, start_index=0, seed_base=None):
     model_or_policy, stack_type = load_policy_or_module(checkpoint_path)
     env = create_eval_env(stack_type, env_config, ENV_ID, render_mode=None, inference_mode=False)
 
     worker_history = {
         "rewards": [],
-        "crashes": [],   
-        "successes": [] 
+        "crashes": [],
+        "successes": []
     }
 
     for ep in range(num_episodes):
-        obs, info = env.reset()
+        # Common Random Numbers: the global episode index determines the seed,
+        # so every policy/scenario faces the same set of initial conditions
+        # (paired comparison). seed_base=None falls back to unseeded resets.
+        if seed_base is None:
+            obs, info = env.reset()
+        else:
+            obs, info = env.reset(seed=seed_base + start_index + ep)
         all_agent_ids = list(obs.keys())
         num_agents = len(all_agent_ids)
         terminated = {"__all__": False}
@@ -56,18 +62,22 @@ def distributed_evaluate_worker(checkpoint_path, env_config, num_episodes):
     return worker_history
 
 
-def run_distributed_evaluation(policy_name, checkpoint_path, env_config, total_episodes=100, num_workers=4):
+def run_distributed_evaluation(policy_name, checkpoint_path, env_config, total_episodes=100, num_workers=4, seed_base=None):
     print(f"\n{'='*50}")
     print(f"Validating: {policy_name}")
     print(f"{'='*50}")
-    
+
 
     episodes_per_worker = total_episodes // num_workers
-    
-    
+
+    # Disjoint, contiguous episode-index ranges per worker so the global index
+    # (start_index + ep) is unique and identical across scenarios for a given seed_base.
     futures = [
-        distributed_evaluate_worker.remote(checkpoint_path, env_config, episodes_per_worker) 
-        for _ in range(num_workers)
+        distributed_evaluate_worker.remote(
+            checkpoint_path, env_config, episodes_per_worker,
+            start_index=w * episodes_per_worker, seed_base=seed_base
+        )
+        for w in range(num_workers)
     ]
     
     
@@ -98,7 +108,8 @@ def collect_data(output_dir):
     results = []
     for scenario in scenarios:
         history, mean, std = run_distributed_evaluation(
-            scenario["name"], scenario["checkpoint"], scenario["config"], NUM_TEST_EPISODES, NUM_WORKERS
+            scenario["name"], scenario["checkpoint"], scenario["config"], NUM_TEST_EPISODES, NUM_WORKERS,
+            seed_base=SEED_BASE
         )
         results.append({
             "name": scenario["name"],
@@ -205,8 +216,15 @@ if __name__ == "__main__":
     parser.add_argument("--collect", action="store_true", help="Run evaluation and collect data")
     parser.add_argument("--plot", action="store_true", help="Plot previously collected data")
     parser.add_argument("--output_dir", type=str, default="./data_zero_shot", help="Directory to save/load data")
-    
+    parser.add_argument("--seed_base", type=int, default=0,
+                        help="Base seed for paired (Common Random Numbers) evaluation. "
+                             "Episode i uses seed_base+i for every scenario, so all policies "
+                             "face identical initial conditions. Use -1 for unseeded random episodes.")
+
     args = parser.parse_args()
+
+    # -1 -> unseeded (legacy behaviour); otherwise paired seeding across scenarios
+    SEED_BASE = None if args.seed_base < 0 else args.seed_base
     
 
     
