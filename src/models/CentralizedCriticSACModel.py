@@ -84,43 +84,40 @@ class CentralizedCriticSACModel(SACTorchModel):
         if twin_q:
             self.twin_q_net = build_q_net()
 
-        self._global_state = None
-
     def forward(self, input_dict, state, seq_lens):
+       
         obs_input = input_dict["obs"]
         if isinstance(obs_input, dict):
             local_obs = obs_input["obs"]
-            self._global_state = obs_input["global_state"]
+            global_state = obs_input["global_state"]
         else:
             local_obs = obs_input[:, :self.local_obs_dim]
-            self._global_state = obs_input[:, self.local_obs_dim:]
-            
-        return local_obs, state
+            global_state = obs_input[:, self.local_obs_dim:]
+
+        return torch.cat([local_obs, global_state], dim=-1), state
 
     def get_action_model_outputs(self, model_out):
-        return self.action_model(model_out), []
+        local_obs = model_out[:, :self.local_obs_dim]
+        return self.action_model(local_obs), []
 
-    def get_q_values(self, model_out, actions=None):
-        gs = self._global_state
+    def _extract_global_state(self, model_out):
+        gs = model_out[:, self.local_obs_dim:]
         if gs.shape[-1] > self.global_state_dim:
             gs = gs[:, :self.global_state_dim]
         elif gs.shape[-1] < self.global_state_dim:
             padding = torch.zeros(gs.shape[0], self.global_state_dim - gs.shape[-1], device=gs.device)
             gs = torch.cat([gs, padding], dim=-1)
-            
+        return gs
+
+    def get_q_values(self, model_out, actions=None):
+        gs = self._extract_global_state(model_out)
         if self.discrete:
             return self.q_net(gs), []
         else:
             return self.q_net(torch.cat([gs, actions], -1)), []
 
     def get_twin_q_values(self, model_out, actions=None):
-        gs = self._global_state
-        if gs.shape[-1] > self.global_state_dim:
-            gs = gs[:, :self.global_state_dim]
-        elif gs.shape[-1] < self.global_state_dim:
-            padding = torch.zeros(gs.shape[0], self.global_state_dim - gs.shape[-1], device=gs.device)
-            gs = torch.cat([gs, padding], dim=-1)
-            
+        gs = self._extract_global_state(model_out)
         if self.discrete:
             return self.twin_q_net(gs), []
         else:

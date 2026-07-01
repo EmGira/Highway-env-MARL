@@ -243,7 +243,8 @@ if __name__ == "__main__":
 
     #./A-checkpoints/TEST/3agents-MAPPO/MAPPO_2/ID_a2e6e_00000/checkpoint_000005
     #./A-checkpoints/TEST/3agents-IPPO/PPO_0/ID_4cd2d_00000/checkpoint_000005
-    checkpoint = "./A-checkpoints/TEST/3agents-IPPO/PPO_0/ID_4cd2d_00000/checkpoint_000005"
+    #./A-checkpoints/MASAC_fail_1m/MASAC_0/ID_01a10_00000/checkpoint_000014
+    checkpoint = "./A-checkpoints/MASAC_fail_1m/MASAC_0/ID_01a10_00000/checkpoint_000014"
 
     scenarios = [
         {

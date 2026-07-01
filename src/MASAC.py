@@ -116,7 +116,7 @@ if __name__ == "__main__":
         .training( 
             
             gamma = 0.975,
-            train_batch_size_per_learner=2048,
+            train_batch_size_per_learner=512,
         
             actor_lr=1e-4,
             critic_lr=3e-4,
@@ -143,14 +143,14 @@ if __name__ == "__main__":
             
             
             num_steps_sampled_before_learning_starts=20000, 
-            target_entropy="auto",
+            target_entropy=0.8,
 
             initial_alpha=0.1,
             target_network_update_freq=0,
             tau=0.005, 
             
             twin_q=True, 
-            grad_clip=1.0, 
+            grad_clip=10, 
                 
             
         )
@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
         storage_path=os.path.abspath(checkpoints_dir),
         
-        stop={"training_iteration": 7000},
+        stop={"training_iteration": 10000},
 
         
         failure_config=FailureConfig(
