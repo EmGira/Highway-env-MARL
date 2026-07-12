@@ -7,7 +7,7 @@ import os
 parent_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_folder)
 
-from utils.models.CentralizedCriticModel import CentralizedCriticModel
+from src.models.CentralizedCriticModel import CentralizedCriticModel
 from utils.wrapper.MAPPO_wrapper import RLlibMAPPOHighwayWrapper
 from utils.callbacks.MAPPO_callbacks import MAPPOCrashLoggerCallback, MAPPOFixAdamBetasCallback, MAPPOSafeEvaluationCallback
 from configs.intersection.IntersectionConfigs import get_ego_only_config
@@ -79,12 +79,14 @@ if __name__ == "__main__":
     parser.add_argument("--resume", type=str, default=None, help="Path to the Run Folder from wich we want to resume training")
     parser.add_argument("--enable_scheduler", action="store_true", help="Enables the ASHA scheduler for early stopping")
     parser.add_argument("--enable_optuna", action="store_true", help="Enables Optuna for HyperParam search")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument("--iterations", type=int, default=200, help="Number of training iterations")
     args = parser.parse_args()
 
 
     nr_of_subdirectories, checkpoints_dir, today = initialize()
 
-    ENV_CONFIG = get_ego_only_config(6)
+    ENV_CONFIG = get_ego_only_config(3)
     ENV_CONFIG["randomize_controlled_vehicles"] = False
     
     tune.register_env("CustomIntersection-env-v0", lambda config: RLlibMAPPOHighwayWrapper(config, "customIntersection-env-v0")) #
@@ -158,13 +160,17 @@ if __name__ == "__main__":
 
     )
 
+    if args.seed is not None:
+        config = config.debugging(seed=args.seed)
+
+    run_name = f"MAPPO_seed_{args.seed}" if args.seed is not None else f"MAPPO_{nr_of_subdirectories}"
     run_config = RunConfig(
 
-        name=f"MAPPO_{nr_of_subdirectories}",
+        name=run_name,
 
         storage_path=os.path.abspath(checkpoints_dir),
         
-        stop={"training_iteration": 200},
+        stop={"training_iteration": args.iterations},
 
         
         failure_config=FailureConfig(

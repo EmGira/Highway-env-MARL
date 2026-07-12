@@ -65,12 +65,14 @@ if __name__ == "__main__":
     parser.add_argument("--resume", type=str, default=None, help="Path to the Run Folder from wich we want to resume training")
     parser.add_argument("--enable_scheduler", action="store_true", help="Enables the ASHA scheduler for early stopping")
     parser.add_argument("--enable_optuna", action="store_true", help="Enables Optuna for HyperParam search")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument("--iterations", type=int, default=200, help="Number of training iterations")
     args = parser.parse_args()
 
 
     nr_of_subdirectories, checkpoints_dir, today = initialize()
 
-    ENV_CONFIG = get_ego_only_config(6)
+    ENV_CONFIG = get_ego_only_config(3)
     ENV_CONFIG["randomize_controlled_vehicles"] = False
     
     
@@ -136,16 +138,20 @@ if __name__ == "__main__":
             policy_mapping_fn=lambda agent_id, episode, **kwargs: "shared_policy",
         )
         .callbacks([CrashLoggerCallback, FixAdamBetasCallback, SafeEvaluationCallback] )
-
+        
     )
 
+    if args.seed is not None:
+        config = config.debugging(seed=args.seed)
+
+    run_name = f"IPPO_seed_{args.seed}" if args.seed is not None else f"IPPO_{nr_of_subdirectories}"
     run_config = RunConfig(
 
-        name=f"IPPO_{nr_of_subdirectories}",
+        name=run_name,
 
         storage_path=os.path.abspath(checkpoints_dir),
         
-        stop={"training_iteration": 200},
+        stop={"training_iteration": args.iterations},
 
         
         failure_config=FailureConfig(

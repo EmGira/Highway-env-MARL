@@ -7,7 +7,7 @@ import os
 parent_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_folder)
 
-from utils.models.CentralizedCriticSACModel import CentralizedCriticSACModel
+from src.models.CentralizedCriticSACModel import CentralizedCriticSACModel
 from utils.wrapper.MASAC_wrapper import RLlibMASACHighwayWrapper
 from utils.callbacks.MAPPO_callbacks import MAPPOCrashLoggerCallback, MAPPOFixAdamBetasCallback, MAPPOSafeEvaluationCallback
 from configs.intersection.IntersectionConfigs import get_ego_only_config
@@ -104,7 +104,7 @@ if __name__ == "__main__":
             num_env_runners=6,  
             num_envs_per_env_runner=1,
             sample_timeout_s=200.0,
-            rollout_fragment_length="auto",  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
+            rollout_fragment_length=100,  #nr of steps each env runner takes before sending to learner, ( total_train_batch_size / (num_env_runners * num_env_per_env_runner) )
         )
         .evaluation(
             evaluation_num_env_runners=0,
@@ -138,20 +138,19 @@ if __name__ == "__main__":
                 "prioritized_replay_alpha": 0.6, 
                 "prioritized_replay_beta": 0.4, 
                 "prioritized_replay_eps": 1e-6,
-                "capacity": 1000000, 
+                "capacity": 500000, 
             },
             
             
-           
             num_steps_sampled_before_learning_starts=20000, 
-            target_entropy=0.2,
+            target_entropy=0.8,
 
             initial_alpha=0.1,
             target_network_update_freq=0,
-            tau=0.001, 
+            tau=0.005, 
             
             twin_q=True, 
-            grad_clip=1.0, 
+            grad_clip=10, 
                 
             
         )
@@ -174,7 +173,7 @@ if __name__ == "__main__":
 
         storage_path=os.path.abspath(checkpoints_dir),
         
-        stop={"training_iteration": 7000},
+        stop={"training_iteration": 10000},
 
         
         failure_config=FailureConfig(
