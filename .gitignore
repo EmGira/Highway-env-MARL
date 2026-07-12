@@ -1,10 +1,6 @@
 /venv
-/A-tests
-/tests.py
 
-/A-checkpoints/*
-/A-dependencies
-/A-Archive
+/checkpoints/*
 
 /optuna_highway_results.db
 
